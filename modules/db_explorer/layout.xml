@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  layout.xml — Макет DB Explorer.
+
+  Три кнопки-вкладки:
+    [⊞ Таблицы]   [⌨ SQL]   [⚙ Функции]
+
+  Содержимое меняется в зависимости от активной вкладки.
+  Рендеринг через UIBase.UIRenderer.
+-->
+<VBox spacing="0" padding="0">
+
+    <!-- Панель вкладок -->
+    <HBox id="tab_bar" spacing="0" padding="10,10,10,6">
+        <Button id="tab_tables"    text="⊞  Таблицы"  style="tab_active" />
+        <Button id="tab_terminal"  text="⌨  SQL"      style="tab"        />
+        <Button id="tab_tools"     text="⚙  Функции"  style="tab"        />
+    </HBox>
+
+    <!-- Разделитель -->
+    <Separator/>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         ВКЛАДКА 1 — Просмотр таблиц
+         ═══════════════════════════════════════════════════════════ -->
+    <VBox id="page_tables" spacing="8" padding="12">
+
+        <!-- Строка выбора таблицы + обновление -->
+        <HBox spacing="6" padding="0">
+            <Button id="btn_tbl_records"   text="records"   style="chip_active"/>
+            <Button id="btn_tbl_kv"        text="kv_store"  style="chip"/>
+            <Button id="btn_tbl_events"    text="event_log" style="chip"/>
+            <Spacer/>
+            <Button id="btn_tbl_refresh"   text="↻"         tooltip="Обновить"/>
+        </HBox>
+
+        <!-- Заголовки колонок -->
+        <HBox id="tbl_header" spacing="0" padding="6,4,6,4">
+            <Label id="col_id"    text="ID"      style="col_head" max_width="40"/>
+            <Label id="col_key"   text="Ключ"    style="col_head"/>
+            <Label id="col_val"   text="Значение" style="col_head" stretch="1"/>
+            <Label id="col_ts"    text="Дата"    style="col_head" max_width="140"/>
+        </HBox>
+
+        <!-- Скролл-область со строками таблицы -->
+        <Scroll id="tbl_scroll" spacing="2" padding="0" min_height="260" max_height="360"/>
+
+        <!-- Статус / счётчик -->
+        <HBox spacing="6" padding="0">
+            <Label id="lbl_tbl_status" text="Выберите таблицу" style="muted"/>
+            <Spacer/>
+            <Label id="lbl_tbl_count"  text=""                 style="accent"/>
+        </HBox>
+
+    </VBox>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         ВКЛАДКА 2 — SQL Терминал
+         ═══════════════════════════════════════════════════════════ -->
+    <VBox id="page_terminal" spacing="8" padding="12" hidden="true">
+
+        <!-- История вывода -->
+        <TextArea id="sql_output" min_height="220"/>
+
+        <!-- Поле ввода SQL -->
+        <HBox spacing="6" padding="0">
+            <Input id="sql_input" placeholder="SELECT * FROM records LIMIT 10"/>
+            <Button id="btn_sql_run"   text="▶ Run" style="accent"/>
+        </HBox>
+
+        <HBox spacing="6" padding="0">
+            <Button id="btn_sql_clear" text="✕ Clear" style="danger"/>
+            <Spacer/>
+            <Label id="lbl_sql_status" text="Готов" style="muted"/>
+        </HBox>
+
+    </VBox>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         ВКЛАДКА 3 — Функции / Тесты
+         ═══════════════════════════════════════════════════════════ -->
+    <VBox id="page_tools" spacing="10" padding="12" hidden="true">
+
+        <Label text="Тест-операции" style="title"/>
+
+        <!-- Группа: Записи -->
+        <VBox spacing="4" padding="0">
+            <Label text="Записи (records)" style="muted"/>
+            <HBox spacing="6" padding="0">
+                <Button id="btn_add_record"    text="＋ Добавить тест"    style="accent"/>
+                <Button id="btn_delete_last"   text="− Удалить последний" style="danger"/>
+            </HBox>
+        </VBox>
+
+        <Separator/>
+
+        <!-- Группа: KV Store -->
+        <VBox spacing="4" padding="0">
+            <Label text="KV Store" style="muted"/>
+            <HBox spacing="6" padding="0">
+                <Input id="inp_kv_key"   placeholder="ключ"     max_width="120"/>
+                <Input id="inp_kv_value" placeholder="значение"/>
+            </HBox>
+            <HBox spacing="6" padding="0">
+                <Button id="btn_kv_set"  text="Set"  style="accent"/>
+                <Button id="btn_kv_get"  text="Get"/>
+                <Button id="btn_kv_del"  text="Del"  style="danger"/>
+                <Spacer/>
+                <Label id="lbl_kv_result" text="" style="accent"/>
+            </HBox>
+        </VBox>
+
+        <Separator/>
+
+        <!-- Группа: Журнал событий -->
+        <VBox spacing="4" padding="0">
+            <Label text="Журнал событий" style="muted"/>
+            <HBox spacing="6" padding="0">
+                <Button id="btn_log_event"    text="⚡ Записать событие" style="accent"/>
+                <Button id="btn_clear_events" text="✕ Очистить лог"     style="danger"/>
+            </HBox>
+        </VBox>
+
+        <Separator/>
+
+        <!-- Статус -->
+        <HBox spacing="6" padding="0">
+            <Label text="DB:" style="muted"/>
+            <Label id="lbl_tools_db" text="—" style="accent"/>
+            <Spacer/>
+            <Button id="btn_tools_refresh" text="↻" tooltip="Обновить статус"/>
+        </HBox>
+
+    </VBox>
+
+</VBox>
