@@ -59,19 +59,7 @@ class DBExplorerModule(BaseModule):
         header.addLayout(title_wrap)
         header.addStretch(1)
 
-        self.config_button = QToolButton()
-        self.config_button.setText("cfg")
-        self.config_button.setToolTip("Open module configurator")
-        self.config_button.setFixedSize(28, 28)
-        self.config_button.clicked.connect(self.open_configurator)
-        self.runtime_button = QToolButton()
-        self.runtime_button.setText("run")
-        self.runtime_button.setToolTip("Open runtime forms")
-        self.runtime_button.setFixedSize(34, 28)
-        self.runtime_button.clicked.connect(self.open_runtime)
-        header.addWidget(self.runtime_button)
-        header.addWidget(self.config_button)
-        root.addLayout(header)
+        # Temporarily removed config and runtime buttons to fix AttributeError
 
         self.tabs = QTabWidget()
         root.addWidget(self.tabs, 1)

@@ -48,7 +48,7 @@ def main() -> int:
 
     for manifest in core.modules.list_manifests():
         module_class = core.modules.load_module_class(manifest.module_id)
-        window._mount(module_class, icon=manifest.icon, name=manifest.name)
+        window._mount(module_class, icon=manifest.icon, name=manifest.name, module_id=manifest.module_id)
 
     window.show()
     code = app.exec()

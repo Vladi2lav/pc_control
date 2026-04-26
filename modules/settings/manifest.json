@@ -1,0 +1,9 @@
+{
+  "module_id": "settings",
+  "class_name": "SettingsModule",
+  "name": "Settings",
+  "icon": "⚙",
+  "version": "1.0.0",
+  "description": "System settings and configuration.",
+  "entry_file": "settings.py"
+}
