@@ -356,13 +356,34 @@ class DatabaseManager:
 
     async def execute(
         self, sql: str, params: Optional[Dict[str, Any]] = None
-    ) -> List[Dict[str, Any]]:
-        """Выполнить произвольный SELECT SQL и вернуть строки."""
+    ) -> Dict[str, Any]:
+        """Execute raw SQL and return rows or command metadata."""
         async with self._session() as session:
             result = await session.execute(text(sql), params or {})
-            keys = list(result.keys())
-            rows = result.fetchall()
-            return [dict(zip(keys, row)) for row in rows]
+            if result.returns_rows:
+                keys = list(result.keys())
+                rows = result.fetchall()
+                return {
+                    "mode": "rows",
+                    "rows": [dict(zip(keys, row)) for row in rows],
+                    "rowcount": len(rows),
+                }
+
+            await session.commit()
+            return {
+                "mode": "command",
+                "rows": [],
+                "rowcount": result.rowcount if result.rowcount is not None else 0,
+            }
+
+    async def list_known_tables(self) -> List[str]:
+        return sorted(self._MODEL_MAP.keys())
+
+    async def get_summary(self) -> Dict[str, Any]:
+        summary: Dict[str, Any] = {"ready": self.is_ready, "tables": {}}
+        for table in await self.list_known_tables():
+            summary["tables"][table] = await self.count(table)
+        return summary
 
     # ── Закрытие ──────────────────────────────────────────────────────────────
 

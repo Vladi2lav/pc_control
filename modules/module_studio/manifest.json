@@ -1,0 +1,9 @@
+{
+  "module_id": "module_studio",
+  "class_name": "ModuleStudioModule",
+  "name": "Module Studio",
+  "icon": "ST",
+  "version": "0.1.0",
+  "description": "Built-in configurator for modules, settings, exports, and source inspection.",
+  "entry_file": "studio.py"
+}

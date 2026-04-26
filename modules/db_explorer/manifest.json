@@ -1,0 +1,9 @@
+{
+  "module_id": "sql_console",
+  "class_name": "DBExplorerModule",
+  "name": "SQL Console",
+  "icon": "DB",
+  "version": "0.1.0",
+  "description": "Module for checking database state and running SQL queries.",
+  "entry_file": "explorer.py"
+}

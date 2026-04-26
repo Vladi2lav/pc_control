@@ -1,591 +1,307 @@
 """
-modules/db_explorer/explorer.py — Бекенд DB Explorer модуля. Документация: docs/explorer.md
+Database and SQL test module.
 """
+
+from __future__ import annotations
 
 import json
 import time
-import logging
-from pathlib import Path
-from typing import Any, Dict, Optional, List
+from typing import Any
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QLineEdit, QTextEdit, QScrollArea, QFrame, QSizePolicy
+    QHBoxLayout,
+    QLabel,
+    QListWidget,
+    QListWidgetItem,
+    QPushButton,
+    QSplitter,
+    QTabWidget,
+    QTextEdit,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
 )
-from PySide6.QtCore import Qt, QObject, Signal, Slot, QTimer
-from PySide6.QtGui import QFont, QColor
 
-_MODULE_DIR = Path(__file__).resolve().parent
-_LAYOUT_XML = _MODULE_DIR / "layout.xml"
-
-logger = logging.getLogger("db_explorer")
-
-# ─── Вспомогательные стили ────────────────────────────────────────────────────
-
-_TAB_ACTIVE = """
-    QPushButton {
-        background: rgba(100,160,255,0.18);
-        border: 1px solid rgba(100,160,255,0.40);
-        border-radius: 10px;
-        color: #7EB8F7;
-        font-size: 12px;
-        font-weight: 600;
-        padding: 6px 14px;
-    }
-"""
-_TAB_IDLE = """
-    QPushButton {
-        background: rgba(255,255,255,0.05);
-        border: 1px solid rgba(255,255,255,0.09);
-        border-radius: 10px;
-        color: rgba(180,185,210,0.55);
-        font-size: 12px;
-        padding: 6px 14px;
-    }
-    QPushButton:hover {
-        background: rgba(255,255,255,0.10);
-        color: #D0D4E8;
-    }
-"""
-_CHIP_ACTIVE = """
-    QPushButton {
-        background: rgba(100,160,255,0.15);
-        border: 1px solid rgba(100,160,255,0.35);
-        border-radius: 8px;
-        color: #7EB8F7;
-        font-size: 11px;
-        padding: 4px 10px;
-    }
-"""
-_CHIP_IDLE = """
-    QPushButton {
-        background: rgba(255,255,255,0.04);
-        border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 8px;
-        color: rgba(180,185,210,0.50);
-        font-size: 11px;
-        padding: 4px 10px;
-    }
-    QPushButton:hover { background: rgba(255,255,255,0.09); color: #D0D4E8; }
-"""
-
-_ROW_EVEN = "background: rgba(255,255,255,0.03); border-radius: 5px;"
-_ROW_ODD  = "background: transparent; border-radius: 5px;"
-_ROW_HOVER = "background: rgba(100,160,255,0.10); border-radius: 5px;"
+from components.module_system import BaseModule
 
 
-# ─── Строка таблицы ───────────────────────────────────────────────────────────
-
-class _TableRow(QWidget):
-    def __init__(self, row_data: dict, idx: int, parent=None):
-        super().__init__(parent)
-        self.setStyleSheet(_ROW_EVEN if idx % 2 == 0 else _ROW_ODD)
-
-        lay = QHBoxLayout(self)
-        lay.setContentsMargins(6, 4, 6, 4)
-        lay.setSpacing(8)
-
-        def cell(text: str, max_w: Optional[int] = None, stretch: int = 0) -> QLabel:
-            lbl = QLabel(str(text)[:80])
-            lbl.setStyleSheet(
-                "color: rgba(200,205,230,0.85); font-size: 11px; background: transparent;"
-            )
-            if max_w:
-                lbl.setMaximumWidth(max_w)
-            lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-            lay.addWidget(lbl, stretch)
-            return lbl
-
-        cell(row_data.get("id", "—"), max_w=40)
-
-        # Ключ зависит от таблицы
-        key = (
-            row_data.get("key") or
-            row_data.get("event_type") or
-            row_data.get("namespace") or "—"
-        )
-        cell(key, max_w=120)
-
-        val = row_data.get("value") or row_data.get("payload") or row_data.get("text_data") or "—"
-        if isinstance(val, dict):
-            val = json.dumps(val, ensure_ascii=False)
-        cell(str(val), stretch=1)
-
-        ts = str(row_data.get("created_at") or row_data.get("updated_at") or "")[:19]
-        cell(ts, max_w=140)
-
-        self.enterEvent  = lambda e: self.setStyleSheet(_ROW_HOVER)
-        self.leaveEvent  = lambda e: self.setStyleSheet(
-            _ROW_EVEN if idx % 2 == 0 else _ROW_ODD
-        )
-
-
-# ─── DBExplorerModule ─────────────────────────────────────────────────────────
-
-class DBExplorerModule(QObject):
-
-    # thread-safe сигналы
-    _sig_rows      = Signal(list)
-    _sig_status    = Signal(str, str)   # (text, style: accent|danger|muted)
-    _sig_count     = Signal(int)
-    _sig_sql_out   = Signal(str, bool)  # (text, is_error)
-    _sig_kv_result = Signal(str)
-    _sig_db_stat   = Signal(str)
-
+class DBExplorerModule(BaseModule):
     def __init__(self, core, parent=None, **kwargs):
-        super().__init__()
-        self._core     = core
-        self._closing  = False
-        self._cur_table = "records"
-
-        # ── Строим виджет из XML ──────────────────────────────────────────────
-        from components.UIBase import UIRenderer
-        renderer = UIRenderer()
-
-        if _LAYOUT_XML.exists():
-            self.widget, self._refs = renderer.load_file(str(_LAYOUT_XML))
-        else:
-            raise FileNotFoundError(f"layout.xml не найден: {_LAYOUT_XML}")
-
-        self.widget.setParent(parent)
-
-        # ── Применяем кастомные стили ─────────────────────────────────────────
-        self._apply_styles()
-
-        # ── Подключаем сигналы к слотам UI ───────────────────────────────────
-        self._sig_rows.connect(self._render_rows)
-        self._sig_status.connect(self._set_status)
-        self._sig_count.connect(self._set_count)
-        self._sig_sql_out.connect(self._append_sql_output)
-        self._sig_kv_result.connect(self._set_kv_result)
-        self._sig_db_stat.connect(self._set_db_stat)
-
-        # ── Подключаем кнопки ────────────────────────────────────────────────
-        self._wire_buttons()
-
-        # ── Первая загрузка ───────────────────────────────────────────────────
-        self._switch_table("records")
-        self._refresh_tools_status()
-
-    # ── Публичный интерфейс ───────────────────────────────────────────────────
-
-    def safe_close(self) -> None:
-        self._closing = True
-        logger.info("[DBExplorer] safe_close called.")
-
-    # ── Стили компонентов ─────────────────────────────────────────────────────
-
-    def _apply_styles(self) -> None:
-        r = self._refs
-
-        for tid, style in [
-            ("tab_tables",   _TAB_ACTIVE),
-            ("tab_terminal", _TAB_IDLE),
-            ("tab_tools",    _TAB_IDLE),
-        ]:
-            if tid in r:
-                r[tid].setStyleSheet(style)
-
-        for cid in ("btn_tbl_records", "btn_tbl_kv", "btn_tbl_events"):
-            if cid in r:
-                r[cid].setStyleSheet(
-                    _CHIP_ACTIVE if cid == "btn_tbl_records" else _CHIP_IDLE
-                )
-
-        # Заголовки колонок таблицы
-        for col in ("col_id", "col_key", "col_val", "col_ts"):
-            if col in r:
-                r[col].setStyleSheet(
-                    "color: rgba(140,148,180,0.70); font-size: 10px; "
-                    "font-weight: 600; letter-spacing: 0.5px; background: transparent;"
-                )
-
-        # Заголовок таблицы-header
-        if "tbl_header" in r:
-            r["tbl_header"].setStyleSheet(
-                "background: rgba(255,255,255,0.04); border-radius: 6px;"
-            )
-
-        # SQL output
-        if "sql_output" in r:
-            r["sql_output"].setStyleSheet("""
-                QTextEdit {
-                    background: rgba(8, 10, 18, 0.80);
-                    border: 1px solid rgba(255,255,255,0.08);
-                    border-radius: 10px;
-                    color: #9ECBFF;
-                    font-family: 'Consolas', 'Cascadia Code', monospace;
-                    font-size: 12px;
-                    padding: 8px;
-                }
-            """)
-            r["sql_output"].setReadOnly(True)
-
-        # SQL input
-        if "sql_input" in r:
-            r["sql_input"].setStyleSheet("""
-                QLineEdit {
-                    background: rgba(255,255,255,0.05);
-                    border: 1px solid rgba(255,255,255,0.10);
-                    border-radius: 8px;
-                    color: #D0D4E8;
-                    font-family: 'Consolas', monospace;
-                    font-size: 12px;
-                    padding: 6px 10px;
-                }
-                QLineEdit:focus { border-color: rgba(100,160,255,0.45); }
-            """)
-
-        # Кнопки инструментов
-        accent_btn = """
-            QPushButton {
-                background: rgba(100,160,255,0.16);
-                border: 1px solid rgba(100,160,255,0.32);
-                border-radius: 9px; color: #7EB8F7;
-                font-size: 12px; padding: 6px 14px;
+        super().__init__(core=core, parent=parent, **kwargs)
+        self._current_table = "records"
+        self.widget = QWidget(parent)
+        self._build_ui()
+        self.register_local_api(
+            {
+                "health": self.api_health,
+                "run_sql": self.api_run_sql,
+                "summary": self.api_summary,
             }
-            QPushButton:hover { background: rgba(100,160,255,0.28); color: #C2DCFF; }
-        """
-        danger_btn = """
-            QPushButton {
-                background: rgba(220,60,60,0.13);
-                border: 1px solid rgba(220,60,60,0.28);
-                border-radius: 9px; color: #F78080;
-                font-size: 12px; padding: 6px 14px;
-            }
-            QPushButton:hover { background: rgba(220,60,60,0.26); color: #FFAAAA; }
-        """
-        for bid in ("btn_sql_run", "btn_add_record", "btn_kv_set", "btn_kv_get",
-                    "btn_log_event", "btn_tools_refresh", "btn_tbl_refresh"):
-            if bid in r:
-                r[bid].setStyleSheet(accent_btn)
+        )
+        self.refresh_table()
+        self.refresh_summary()
 
-        for bid in ("btn_sql_clear", "btn_delete_last", "btn_kv_del", "btn_clear_events"):
-            if bid in r:
-                r[bid].setStyleSheet(danger_btn)
+    def _build_ui(self) -> None:
+        root = QVBoxLayout(self.widget)
+        root.setContentsMargins(14, 14, 14, 14)
+        root.setSpacing(10)
 
-    # ── Подключение кнопок ────────────────────────────────────────────────────
+        header = QHBoxLayout()
+        title = QLabel("SQL Console")
+        title.setProperty("style_", "title")
+        subtitle = QLabel("Database check, raw SQL, and service calls")
+        subtitle.setProperty("style_", "muted")
+        title_wrap = QVBoxLayout()
+        title_wrap.setSpacing(2)
+        title_wrap.addWidget(title)
+        title_wrap.addWidget(subtitle)
+        header.addLayout(title_wrap)
+        header.addStretch(1)
 
-    def _wire_buttons(self) -> None:
-        r = self._refs
+        self.config_button = QToolButton()
+        self.config_button.setText("cfg")
+        self.config_button.setToolTip("Open module configurator")
+        self.config_button.setFixedSize(28, 28)
+        self.config_button.clicked.connect(self.open_configurator)
+        self.runtime_button = QToolButton()
+        self.runtime_button.setText("run")
+        self.runtime_button.setToolTip("Open runtime forms")
+        self.runtime_button.setFixedSize(34, 28)
+        self.runtime_button.clicked.connect(self.open_runtime)
+        header.addWidget(self.runtime_button)
+        header.addWidget(self.config_button)
+        root.addLayout(header)
 
-        # ── Переключение вкладок ──────────────────────────────────────────────
-        if "tab_tables"   in r: r["tab_tables"].clicked.connect(lambda: self._switch_tab("tables"))
-        if "tab_terminal" in r: r["tab_terminal"].clicked.connect(lambda: self._switch_tab("terminal"))
-        if "tab_tools"    in r: r["tab_tools"].clicked.connect(lambda: self._switch_tab("tools"))
+        self.tabs = QTabWidget()
+        root.addWidget(self.tabs, 1)
 
-        # ── Таблицы ───────────────────────────────────────────────────────────
-        if "btn_tbl_records" in r:
-            r["btn_tbl_records"].clicked.connect(lambda: self._switch_table("records"))
-        if "btn_tbl_kv" in r:
-            r["btn_tbl_kv"].clicked.connect(lambda: self._switch_table("kv_store"))
-        if "btn_tbl_events" in r:
-            r["btn_tbl_events"].clicked.connect(lambda: self._switch_table("event_log"))
-        if "btn_tbl_refresh" in r:
-            r["btn_tbl_refresh"].clicked.connect(lambda: self._switch_table(self._cur_table))
+        self._build_data_tab()
+        self._build_sql_tab()
+        self._build_service_tab()
 
-        # ── SQL терминал ──────────────────────────────────────────────────────
-        if "btn_sql_run" in r:
-            r["btn_sql_run"].clicked.connect(self._run_sql)
-        if "btn_sql_clear" in r:
-            r["btn_sql_clear"].clicked.connect(self._clear_sql)
-        if "sql_input" in r:
-            r["sql_input"].returnPressed.connect(self._run_sql)
+    def _build_data_tab(self) -> None:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(8)
 
-        # ── Функции ───────────────────────────────────────────────────────────
-        if "btn_add_record"    in r: r["btn_add_record"].clicked.connect(self._add_test_record)
-        if "btn_delete_last"   in r: r["btn_delete_last"].clicked.connect(self._delete_last_record)
-        if "btn_kv_set"        in r: r["btn_kv_set"].clicked.connect(self._kv_set)
-        if "btn_kv_get"        in r: r["btn_kv_get"].clicked.connect(self._kv_get)
-        if "btn_kv_del"        in r: r["btn_kv_del"].clicked.connect(self._kv_del)
-        if "btn_log_event"     in r: r["btn_log_event"].clicked.connect(self._log_event)
-        if "btn_clear_events"  in r: r["btn_clear_events"].clicked.connect(self._clear_events)
-        if "btn_tools_refresh" in r: r["btn_tools_refresh"].clicked.connect(self._refresh_tools_status)
+        top = QHBoxLayout()
+        self.btn_records = QPushButton("records")
+        self.btn_kv = QPushButton("kv_store")
+        self.btn_events = QPushButton("event_log")
+        self.btn_refresh = QPushButton("Refresh")
+        self.btn_refresh.setProperty("style_", "accent")
+        for button, table in (
+            (self.btn_records, "records"),
+            (self.btn_kv, "kv_store"),
+            (self.btn_events, "event_log"),
+        ):
+            button.clicked.connect(lambda checked=False, t=table: self.set_table(t))
+            top.addWidget(button)
+        top.addStretch(1)
+        self.btn_refresh.clicked.connect(self.refresh_table)
+        top.addWidget(self.btn_refresh)
+        layout.addLayout(top)
 
-    # ── Переключение вкладок ──────────────────────────────────────────────────
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setChildrenCollapsible(False)
+        layout.addWidget(splitter, 1)
 
-    def _switch_tab(self, tab: str) -> None:
-        pages = {
-            "tables":   "page_tables",
-            "terminal": "page_terminal",
-            "tools":    "page_tools",
-        }
-        tabs = {
-            "tables":   "tab_tables",
-            "terminal": "tab_terminal",
-            "tools":    "tab_tools",
-        }
-        r = self._refs
-        for key, pid in pages.items():
-            if pid in r:
-                r[pid].setVisible(key == tab)
-        for key, tid in tabs.items():
-            if tid in r:
-                r[tid].setStyleSheet(_TAB_ACTIVE if key == tab else _TAB_IDLE)
+        self.table_list = QListWidget()
+        self.table_details = QTextEdit()
+        self.table_details.setReadOnly(True)
+        self.table_list.currentItemChanged.connect(self._show_current_row)
+        splitter.addWidget(self.table_list)
+        splitter.addWidget(self.table_details)
+        splitter.setSizes([430, 530])
 
-        if tab == "tables":
-            self._switch_table(self._cur_table)
-        elif tab == "tools":
-            self._refresh_tools_status()
+        footer = QHBoxLayout()
+        self.table_status = QLabel("Ready")
+        self.table_status.setProperty("style_", "muted")
+        self.table_count = QLabel("")
+        self.table_count.setProperty("style_", "accent")
+        footer.addWidget(self.table_status)
+        footer.addStretch(1)
+        footer.addWidget(self.table_count)
+        layout.addLayout(footer)
 
-    # ── Таблицы ───────────────────────────────────────────────────────────────
+        self.tabs.addTab(page, "Data")
 
-    def _switch_table(self, table: str) -> None:
-        self._cur_table = table
-        r = self._refs
-        chip_map = {
-            "records":   "btn_tbl_records",
-            "kv_store":  "btn_tbl_kv",
-            "event_log": "btn_tbl_events",
-        }
-        for t, cid in chip_map.items():
-            if cid in r:
-                r[cid].setStyleSheet(_CHIP_ACTIVE if t == table else _CHIP_IDLE)
+    def _build_sql_tab(self) -> None:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(8)
 
-        self._sig_status.emit(f"Загрузка {table}…", "muted")
-        future = self._core.submit(self._fetch_rows(table))
-        future.add_done_callback(self._on_rows_fetched)
+        self.sql_input = QTextEdit()
+        self.sql_input.setPlaceholderText(
+            "SELECT * FROM records LIMIT 20;\nUPDATE kv_store SET value='demo' WHERE key='theme';"
+        )
+        self.sql_input.setMinimumHeight(140)
+        layout.addWidget(self.sql_input)
 
-    async def _fetch_rows(self, table: str) -> dict:
-        try:
-            rows = await self._core.db.get_all(table, limit=200)
-            return {"ok": True, "table": table, "rows": rows}
-        except Exception as e:
-            return {"ok": False, "table": table, "error": str(e), "rows": []}
+        actions = QHBoxLayout()
+        self.btn_run_sql = QPushButton("Run SQL")
+        self.btn_run_sql.setProperty("style_", "accent")
+        self.btn_clear_sql = QPushButton("Clear")
+        self.btn_examples = QPushButton("Insert example")
+        self.btn_run_sql.clicked.connect(self.run_sql)
+        self.btn_clear_sql.clicked.connect(self._clear_sql)
+        self.btn_examples.clicked.connect(self._fill_example)
+        actions.addWidget(self.btn_run_sql)
+        actions.addWidget(self.btn_clear_sql)
+        actions.addWidget(self.btn_examples)
+        actions.addStretch(1)
+        layout.addLayout(actions)
 
-    def _on_rows_fetched(self, future) -> None:
-        try:
-            data = future.result()
-        except Exception as e:
-            self._sig_status.emit(f"Ошибка: {e}", "danger")
-            return
-        if data["ok"]:
-            self._sig_rows.emit(data["rows"])
-            self._sig_status.emit(f"Таблица: {data['table']}", "muted")
-            self._sig_count.emit(len(data["rows"]))
-        else:
-            self._sig_status.emit(f"Ошибка: {data['error']}", "danger")
-            self._sig_rows.emit([])
+        self.sql_output = QTextEdit()
+        self.sql_output.setReadOnly(True)
+        layout.addWidget(self.sql_output, 1)
 
-    @Slot(list)
-    def _render_rows(self, rows: list) -> None:
-        """Перерисовывает строки в scroll-области."""
-        scroll: QScrollArea = self._refs.get("tbl_scroll")
-        if not scroll:
-            return
+        self.sql_status = QLabel("Ready")
+        self.sql_status.setProperty("style_", "muted")
+        layout.addWidget(self.sql_status)
 
-        inner = scroll.widget()
-        if inner is None:
-            inner = QWidget()
-            inner.setStyleSheet("background: transparent;")
-            scroll_lay = QVBoxLayout(inner)
-            scroll_lay.setContentsMargins(0, 0, 0, 0)
-            scroll_lay.setSpacing(2)
-            scroll.setWidget(inner)
-            scroll.setWidgetResizable(True)
-            scroll.setFrameShape(QFrame.Shape.NoFrame)
-            scroll.setStyleSheet("background: transparent; border: none;")
+        self.tabs.addTab(page, "SQL")
 
-        lay = inner.layout()
-        # Очищаем старые строки
-        while lay.count():
-            item = lay.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+    def _build_service_tab(self) -> None:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(8)
 
-        if not rows:
-            empty = QLabel("— нет данных —")
-            empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            empty.setStyleSheet("color: rgba(180,185,210,0.35); font-size: 12px; padding: 20px;")
-            lay.addWidget(empty)
-        else:
-            for i, row in enumerate(rows):
-                lay.addWidget(_TableRow(row, i, inner))
+        actions = QHBoxLayout()
+        self.btn_add_record = QPushButton("Add test record")
+        self.btn_add_record.setProperty("style_", "accent")
+        self.btn_log_event = QPushButton("Write event")
+        self.btn_log_event.setProperty("style_", "accent")
+        self.btn_summary = QPushButton("Refresh status")
+        self.btn_summary.clicked.connect(self.refresh_summary)
+        self.btn_add_record.clicked.connect(self.add_test_record)
+        self.btn_log_event.clicked.connect(self.log_event)
+        actions.addWidget(self.btn_add_record)
+        actions.addWidget(self.btn_log_event)
+        actions.addWidget(self.btn_summary)
+        actions.addStretch(1)
+        layout.addLayout(actions)
 
-        lay.addStretch()
+        self.summary_output = QTextEdit()
+        self.summary_output.setReadOnly(True)
+        layout.addWidget(self.summary_output, 1)
 
-    @Slot(str, str)
-    def _set_status(self, text: str, style: str) -> None:
-        lbl = self._refs.get("lbl_tbl_status")
-        if lbl:
-            colors = {"accent": "#7EB8F7", "danger": "#F78080", "muted": "rgba(180,185,210,0.55)"}
-            lbl.setText(text)
-            lbl.setStyleSheet(
-                f"color: {colors.get(style, colors['muted'])}; "
-                f"font-size: 11px; background: transparent;"
-            )
-
-    @Slot(int)
-    def _set_count(self, count: int) -> None:
-        lbl = self._refs.get("lbl_tbl_count")
-        if lbl:
-            lbl.setText(f"{count} записей")
-
-    # ── SQL Терминал ──────────────────────────────────────────────────────────
-
-    def _run_sql(self) -> None:
-        inp = self._refs.get("sql_input")
-        if not inp:
-            return
-        sql = inp.text().strip()
-        if not sql:
-            return
-        self._sig_sql_out.emit(f"▶ {sql}", False)
-        inp.clear()
-
-        future = self._core.submit(self._exec_sql(sql))
-        future.add_done_callback(self._on_sql_done)
-
-    async def _exec_sql(self, sql: str) -> dict:
-        try:
-            rows = await self._core.db.execute(sql)
-            return {"ok": True, "rows": rows, "sql": sql}
-        except Exception as e:
-            return {"ok": False, "error": str(e), "sql": sql}
-
-    def _on_sql_done(self, future) -> None:
-        try:
-            data = future.result()
-        except Exception as e:
-            self._sig_sql_out.emit(f"⚠ {e}", True)
-            return
-        if data["ok"]:
-            rows = data["rows"]
-            if not rows:
-                self._sig_sql_out.emit("  (нет результатов)", False)
-            else:
-                for r in rows[:100]:
-                    self._sig_sql_out.emit("  " + json.dumps(r, ensure_ascii=False), False)
-                if len(rows) > 100:
-                    self._sig_sql_out.emit(f"  … и ещё {len(rows)-100} строк", False)
-        else:
-            self._sig_sql_out.emit(f"⚠ {data['error']}", True)
-
-    @Slot(str, bool)
-    def _append_sql_output(self, text: str, is_error: bool) -> None:
-        out: QTextEdit = self._refs.get("sql_output")
-        if not out:
-            return
-        color = "#FF8080" if is_error else "#9ECBFF"
-        # Для команды ▶ - другой цвет
-        if text.startswith("▶"):
-            color = "#C8F0A0"
-        out.append(f'<span style="color:{color};font-family:Consolas;font-size:12px;">'
-                   f'{text.replace("<","&lt;").replace(">","&gt;")}</span>')
-        sb = out.verticalScrollBar()
-        if sb:
-            sb.setValue(sb.maximum())
+        self.tabs.addTab(page, "Service")
 
     def _clear_sql(self) -> None:
-        out: QTextEdit = self._refs.get("sql_output")
-        if out:
-            out.clear()
-        stat = self._refs.get("lbl_sql_status")
-        if stat:
-            stat.setText("Очищено")
+        self.sql_output.clear()
+        self.sql_status.setText("Cleared")
 
-    # ── Функции / Инструменты ─────────────────────────────────────────────────
+    def _fill_example(self) -> None:
+        self.sql_input.setPlainText(
+            "SELECT * FROM records LIMIT 20;\n"
+            "SELECT * FROM kv_store;\n"
+            "SELECT * FROM event_log ORDER BY id DESC LIMIT 10;"
+        )
 
-    def _add_test_record(self) -> None:
-        data = {
-            "table_name": "test",
-            "key":        f"ping_{int(time.time())}",
-            "value":      {"ts": time.time(), "source": "db_explorer"},
-            "text_data":  "test from db_explorer",
-        }
-        f = self._core.submit(self._core.db.add("records", data))
-        f.add_done_callback(lambda fut: self._refresh_tools_status())
-
-    def _delete_last_record(self) -> None:
-        async def _del():
-            rows = await self._core.db.get_all("records", limit=1000)
-            if rows:
-                await self._core.db.delete("records", rows[-1]["id"])
-                return f"Удалена запись id={rows[-1]['id']}"
-            return "Нет записей для удаления"
-        f = self._core.submit(_del())
-        f.add_done_callback(lambda fut: self._refresh_tools_status())
-
-    def _kv_set(self) -> None:
-        key = self._refs.get("inp_kv_key")
-        val = self._refs.get("inp_kv_value")
-        if not key or not val:
+    def _show_current_row(self, current, previous) -> None:
+        if current is None:
+            self.table_details.clear()
             return
-        k, v = key.text().strip(), val.text().strip()
-        if not k:
-            return
-        f = self._core.submit(self._core.db.kv_set("explorer", k, v))
-        f.add_done_callback(lambda fut: self._sig_kv_result.emit(f"✓ Set: {k}={v}"))
+        payload = current.data(Qt.ItemDataRole.UserRole)
+        self.table_details.setPlainText(json.dumps(payload, indent=2, ensure_ascii=False, default=str))
 
-    def _kv_get(self) -> None:
-        key = self._refs.get("inp_kv_key")
-        if not key:
+    def set_table(self, table: str) -> None:
+        self._current_table = table
+        self.refresh_table()
+
+    def refresh_table(self) -> None:
+        rows = self.core.run_sync(self.core.db.get_all(self._current_table, limit=200))
+        self.table_list.clear()
+        for row in rows:
+            title = row.get("key") or row.get("event_type") or row.get("namespace") or row.get("id")
+            preview = json.dumps(row, ensure_ascii=False, default=str)
+            item = QListWidgetItem(str(title))
+            item.setToolTip(preview)
+            item.setData(Qt.ItemDataRole.UserRole, row)
+            self.table_list.addItem(item)
+        if rows:
+            self.table_list.setCurrentRow(0)
+        self.table_status.setText(f"Table: {self._current_table}")
+        self.table_count.setText(f"{len(rows)} rows")
+
+    def run_sql(self) -> None:
+        source = self.sql_input.toPlainText().strip()
+        if not source:
+            self.sql_status.setText("SQL is empty")
             return
-        k = key.text().strip()
-        if not k:
-            return
-        async def _get():
-            return await self._core.db.kv_get("explorer", k, default="(не найдено)")
-        f = self._core.submit(_get())
-        def _cb(fut):
+
+        statements = [part.strip() for part in source.split(";") if part.strip()]
+        self.sql_output.append(">>> run")
+        errors = 0
+        for statement in statements:
+            self.sql_output.append(f"SQL> {statement}")
             try:
-                v = fut.result()
-                self._sig_kv_result.emit(f"{k} = {v}")
-            except Exception as e:
-                self._sig_kv_result.emit(f"⚠ {e}")
-        f.add_done_callback(_cb)
+                result = self.core.run_sync(self.core.db.execute(statement))
+                if result["mode"] == "rows":
+                    if not result["rows"]:
+                        self.sql_output.append("(no rows)\n")
+                    else:
+                        for row in result["rows"][:100]:
+                            self.sql_output.append(json.dumps(row, ensure_ascii=False, default=str))
+                        if len(result["rows"]) > 100:
+                            self.sql_output.append(f"... and {len(result['rows']) - 100} more rows")
+                        self.sql_output.append("")
+                else:
+                    self.sql_output.append(f"affected={result['rowcount']}\n")
+            except Exception as exc:
+                errors += 1
+                self.sql_output.append(f"ERROR: {exc}\n")
+        self.sql_status.setText(f"Completed: {len(statements)} statement(s), errors={errors}")
+        self.refresh_summary()
+        self.refresh_table()
 
-    def _kv_del(self) -> None:
-        key = self._refs.get("inp_kv_key")
-        if not key:
-            return
-        k = key.text().strip()
-        if not k:
-            return
-        f = self._core.submit(self._core.db.kv_delete("explorer", k))
-        f.add_done_callback(lambda fut: self._sig_kv_result.emit(f"✕ Удалён: {k}"))
+    def add_test_record(self) -> None:
+        payload = {
+            "table_name": "test",
+            "key": f"ping_{int(time.time())}",
+            "value": {"timestamp": time.time(), "module": "sql_console"},
+            "text_data": "test row from sql module",
+        }
+        self.core.run_sync(self.core.db.add("records", payload))
+        self.refresh_summary()
+        self.refresh_table()
 
-    def _log_event(self) -> None:
-        f = self._core.submit(
-            self._core.db.log_event(
-                "db_explorer", "manual_test",
-                {"ts": time.time(), "note": "ручной тест из db_explorer"}
+    def log_event(self) -> None:
+        self.core.run_sync(
+            self.core.db.log_event(
+                "sql_console",
+                "manual_test",
+                {"at": time.time(), "source": "ui"},
             )
         )
-        f.add_done_callback(lambda fut: self._refresh_tools_status())
+        self.refresh_summary()
 
-    def _clear_events(self) -> None:
-        async def _clear():
-            rows = await self._core.db.get_all("event_log", limit=10000)
-            for r in rows:
-                await self._core.db.delete("event_log", r["id"])
-            return len(rows)
-        f = self._core.submit(_clear())
-        f.add_done_callback(lambda fut: self._refresh_tools_status())
+    def refresh_summary(self) -> None:
+        summary = self.core.run_sync(self.core.db.get_summary())
+        lines = [f"db_ready = {summary['ready']}"]
+        for table, count in summary["tables"].items():
+            lines.append(f"{table}: {count}")
+        lines.append("")
+        lines.append("api routes:")
+        for route in self.core.list_api():
+            if route.startswith("sql_console.") or route.startswith("app.") or route.startswith("modules."):
+                lines.append(f" - {route}")
+        self.summary_output.setPlainText("\n".join(lines))
 
-    def _refresh_tools_status(self) -> None:
-        async def _stat():
-            is_ready = self._core.db.is_ready
-            count = 0
-            if is_ready:
-                count = await self._core.db.count("records")
-            return f"{'● Готова' if is_ready else '○ Нет'} | records: {count}"
-        f = self._core.submit(_stat())
-        def _cb(fut):
-            try:
-                self._sig_db_stat.emit(fut.result())
-            except Exception as e:
-                self._sig_db_stat.emit(f"⚠ {e}")
-        f.add_done_callback(_cb)
+    def api_health(self) -> dict[str, Any]:
+        summary = self.core.run_sync(self.core.db.get_summary())
+        return {"module": "sql_console", "ready": summary["ready"], "tables": summary["tables"]}
 
-    @Slot(str)
-    def _set_kv_result(self, text: str) -> None:
-        lbl = self._refs.get("lbl_kv_result")
-        if lbl:
-            lbl.setText(text)
+    def api_run_sql(self, sql: str) -> dict[str, Any]:
+        return self.core.run_sync(self.core.db.execute(sql))
 
-    @Slot(str)
-    def _set_db_stat(self, text: str) -> None:
-        lbl = self._refs.get("lbl_tools_db")
-        if lbl:
-            lbl.setText(text)
+    def api_summary(self) -> dict[str, Any]:
+        return self.core.run_sync(self.core.db.get_summary())
+
+    def safe_close(self) -> None:
+        super().safe_close()

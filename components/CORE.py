@@ -1,14 +1,18 @@
 """
-CORE.py — Ядро системы. Документация: docs/CORE.md
+Application core.
 """
+
+from __future__ import annotations
 
 import asyncio
 import logging
 import threading
 from concurrent.futures import Future
-from typing import Any, Coroutine, Optional
+from typing import Any, Callable, Coroutine, Optional
 
 from components.db import DatabaseManager
+from components.module_system import ModuleManager
+
 
 logger = logging.getLogger("core")
 logging.basicConfig(
@@ -16,19 +20,16 @@ logging.basicConfig(
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
 )
 
-# ─── Core ────────────────────────────────────────────────────────────────────
 
 class Core:
     def __init__(self) -> None:
         self.db = DatabaseManager()
+        self.modules = ModuleManager(self)
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._thread: Optional[threading.Thread] = None
-        self._stop_event = threading.Event()
-
-    # ── Запуск / Остановка ───────────────────────────────────────────────────
+        self._api_handlers: dict[str, Callable[..., Any]] = {}
 
     def start(self) -> None:
-        """Запускает фоновый поток с event loop и инициализирует БД."""
         self._loop = asyncio.new_event_loop()
         self._thread = threading.Thread(
             target=self._run_loop,
@@ -37,68 +38,62 @@ class Core:
         )
         self._thread.start()
         logger.info("[Core] Background loop started.")
-
-        # Инициализируем БД (блокирует текущий поток до готовности)
         self.run_sync(self.db.init())
-        logger.info("[Core] DB initialised.")
+        self.modules.discover()
+        logger.info("[Core] Ready.")
 
     def _run_loop(self) -> None:
+        if self._loop is None:
+            return
         asyncio.set_event_loop(self._loop)
         self._loop.run_forever()
 
     def stop(self, timeout: float = 5.0) -> None:
-        """
-        Корректно останавливает ядро:
-        1. Закрывает БД
-        2. Останавливает event loop
-        3. Ждёт завершения потока
-        """
         logger.info("[Core] Stopping...")
         if self._loop and self._loop.is_running():
-            # Корректно закрываем БД перед выходом
             future = asyncio.run_coroutine_threadsafe(self.db.close(), self._loop)
             try:
                 future.result(timeout=timeout)
-            except Exception as e:
-                logger.warning(f"[Core] DB close warning: {e}")
-
+            except Exception as exc:
+                logger.warning("[Core] DB close warning: %s", exc)
             self._loop.call_soon_threadsafe(self._loop.stop)
-
         if self._thread:
             self._thread.join(timeout=timeout)
         logger.info("[Core] Stopped.")
 
-    # ── Хелперы для вызова async из sync-кода ───────────────────────────────
-
     def submit(self, coro: Coroutine) -> Future:
-        """
-        Отправляет корутину в фоновый loop.
-        Возвращает concurrent.futures.Future.
-
-        Пример:
-            f = core.submit(core.db.add("records", {...}))
-            result = f.result(timeout=5)
-        """
         if self._loop is None:
-            raise RuntimeError("Core not started. Call core.start() first.")
+            raise RuntimeError("Core is not started.")
         return asyncio.run_coroutine_threadsafe(coro, self._loop)
 
     def run_sync(self, coro: Coroutine, timeout: float = 30.0) -> Any:
-        """
-        Запускает корутину и блокирует текущий поток до результата.
-        Удобно для инициализации из main-потока.
-
-        Пример:
-            result = core.run_sync(core.db.kv_get("app", "theme"))
-        """
         future = self.submit(coro)
         return future.result(timeout=timeout)
+
+    def register_api(self, route: str, handler: Callable[..., Any]) -> None:
+        self._api_handlers[route] = handler
+
+    def unregister_api(self, route: str) -> None:
+        self._api_handlers.pop(route, None)
+
+    def list_api(self) -> list[str]:
+        return sorted(self._api_handlers)
+
+    def call_api(self, route: str, **params) -> Any:
+        handler = self._api_handlers.get(route)
+        if handler is None:
+            raise KeyError(f"Unknown API route: {route}")
+        return handler(**params)
+
+    def get_setting(self, key: str, default: Any = None) -> Any:
+        return self.run_sync(self.db.kv_get("app_settings", key, default=default))
+
+    def set_setting(self, key: str, value: Any) -> Any:
+        return self.run_sync(self.db.kv_set("app_settings", key, value))
 
     @property
     def is_ready(self) -> bool:
         return self.db.is_ready
 
-
-# ─── Глобальный экземпляр ────────────────────────────────────────────────────
 
 core = Core()
