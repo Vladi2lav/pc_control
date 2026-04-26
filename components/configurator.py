@@ -9,12 +9,12 @@ import uuid
 from copy import deepcopy
 from typing import Any
 
-<<<<<<< ours
+
 from PySide6.QtCore import QEvent, QPoint, QRect, Qt, Signal
 from PySide6.QtGui import QAction, QColor, QPainter, QPen
-=======
+
 from PySide6.QtCore import QPoint, QRect, Qt, Signal
->>>>>>> theirs
+
 from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
@@ -22,7 +22,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-<<<<<<< ours
     QInputDialog,
     QListWidget,
     QListWidgetItem,
@@ -30,11 +29,6 @@ from PySide6.QtWidgets import (
     QMdiSubWindow,
     QMainWindow,
     QMessageBox,
-=======
-    QListWidget,
-    QListWidgetItem,
-    QMainWindow,
->>>>>>> theirs
     QPushButton,
     QScrollArea,
     QSplitter,
@@ -194,20 +188,12 @@ class DesignerCanvas(QWidget):
 
     def eventFilter(self, watched, event):
         control_id = watched.objectName()
-<<<<<<< ours
         if event.type() == QEvent.Type.MouseButtonPress:
-=======
-        if event.type() == event.Type.MouseButtonPress:
->>>>>>> theirs
             self.select_control(control_id)
             self._drag_control_id = control_id
             self._drag_offset = event.position().toPoint()
             return False
-<<<<<<< ours
         if event.type() == QEvent.Type.MouseMove and self._drag_control_id == control_id and event.buttons() & Qt.MouseButton.LeftButton:
-=======
-        if event.type() == event.Type.MouseMove and self._drag_control_id == control_id and event.buttons() & Qt.MouseButton.LeftButton:
->>>>>>> theirs
             control = self.selected_control()
             if control:
                 new_pos = watched.pos() + event.position().toPoint() - self._drag_offset
@@ -217,35 +203,22 @@ class DesignerCanvas(QWidget):
                 control["x"] = new_pos.x()
                 control["y"] = new_pos.y()
             return False
-<<<<<<< ours
         if event.type() == QEvent.Type.MouseButtonRelease and self._drag_control_id == control_id:
-=======
-        if event.type() == event.Type.MouseButtonRelease and self._drag_control_id == control_id:
->>>>>>> theirs
             self._drag_control_id = None
             return False
         return super().eventFilter(watched, event)
 
     def paintEvent(self, event) -> None:
         super().paintEvent(event)
-<<<<<<< ours
         painter = QPainter(self)
         painter.fillRect(self.rect(), QColor(240, 238, 221))
         painter.setPen(QPen(QColor(205, 199, 174), 1))
-=======
-        from PySide6.QtGui import QColor, QPainter, QPen
-
-        painter = QPainter(self)
-        painter.fillRect(self.rect(), QColor(255, 255, 255, 8))
-        painter.setPen(QPen(QColor(255, 255, 255, 14), 1))
->>>>>>> theirs
         step = 24
         for x in range(0, self.width(), step):
             painter.drawLine(x, 0, x, self.height())
         for y in range(0, self.height(), step):
             painter.drawLine(0, y, self.width(), y)
 
-<<<<<<< ours
         selected = self.selected_control()
         if selected:
             painter.setPen(QPen(QColor(43, 93, 171), 2))
@@ -256,8 +229,6 @@ class DesignerCanvas(QWidget):
                 max(12, int(selected.get("h", 0)) + 2),
             )
 
-=======
->>>>>>> theirs
 
 class FormDesignerTab(QWidget):
     selected = Signal(str, str, str)
@@ -364,7 +335,6 @@ class ConfiguratorWindow(QMainWindow):
         self._node_kind = "root"
         self._node_payload: Any = None
         self._designer_tabs: dict[str, FormDesignerTab] = {}
-<<<<<<< ours
         self._designer_windows: dict[str, QMdiSubWindow] = {}
         self._tree_sync = False
         self.setWindowTitle("Configurator")
@@ -381,11 +351,6 @@ class ConfiguratorWindow(QMainWindow):
         for caption in ("Save", "Reload", "Add Form", "Add Page", "Add Requisite"):
             action = QAction(caption, self)
             toolbar.addAction(action)
-=======
-        self.setWindowTitle("Configurator")
-        self.setWindowState(Qt.WindowState.WindowMaximized)
-        self._build_ui()
->>>>>>> theirs
 
     def _build_ui(self) -> None:
         shell = QWidget()
@@ -402,30 +367,21 @@ class ConfiguratorWindow(QMainWindow):
         self.path_label = QLabel("")
         self.path_label.setProperty("style_", "muted")
         self.add_form_button = QPushButton("Add form")
-<<<<<<< ours
         self.create_module_button = QPushButton("Create module")
-=======
->>>>>>> theirs
         self.add_form_button.setProperty("style_", "accent")
         self.save_button = QPushButton("Save")
         self.save_button.setProperty("style_", "accent")
         self.reload_button = QPushButton("Reload")
         self.close_button = QPushButton("Close")
         self.add_form_button.clicked.connect(self.add_form)
-<<<<<<< ours
         self.create_module_button.clicked.connect(self.create_module_from_configurator)
-=======
->>>>>>> theirs
         self.save_button.clicked.connect(self.save_config)
         self.reload_button.clicked.connect(self.reload_config)
         self.close_button.clicked.connect(self.close)
         header.addWidget(self.title_label)
         header.addWidget(self.path_label)
         header.addStretch(1)
-<<<<<<< ours
         header.addWidget(self.create_module_button)
-=======
->>>>>>> theirs
         header.addWidget(self.add_form_button)
         header.addWidget(self.reload_button)
         header.addWidget(self.save_button)
@@ -439,26 +395,18 @@ class ConfiguratorWindow(QMainWindow):
         self.tree = QTreeWidget()
         self.tree.setHeaderHidden(True)
         self.tree.currentItemChanged.connect(self._on_tree_changed)
-<<<<<<< ours
         self.tree.itemChanged.connect(self._on_tree_item_renamed)
-=======
->>>>>>> theirs
         splitter.addWidget(self.tree)
 
         center_splitter = QSplitter(Qt.Orientation.Vertical)
         center_splitter.setChildrenCollapsible(False)
         splitter.addWidget(center_splitter)
 
-<<<<<<< ours
         self.workspace_mdi = QMdiArea()
         self.workspace_mdi.setViewMode(QMdiArea.ViewMode.SubWindowView)
         self.workspace_mdi.setTabsClosable(False)
         self.workspace_mdi.setOption(QMdiArea.AreaOption.DontMaximizeSubWindowOnActivation, True)
         center_splitter.addWidget(self.workspace_mdi)
-=======
-        self.workspace_tabs = QTabWidget()
-        center_splitter.addWidget(self.workspace_tabs)
->>>>>>> theirs
 
         self.bottom_tabs = QTabWidget()
         center_splitter.addWidget(self.bottom_tabs)
@@ -480,7 +428,6 @@ class ConfiguratorWindow(QMainWindow):
         form_layout.setContentsMargins(0, 0, 0, 0)
         form_layout.setSpacing(8)
         self.prop_name = QLineEdit()
-<<<<<<< ours
         self.prop_type = QComboBox()
         self.prop_type.addItems(["button", "label", "input", "checkbox", "String", "Boolean", "Number"])
         self.prop_text = QLineEdit()
@@ -488,14 +435,6 @@ class ConfiguratorWindow(QMainWindow):
         self.prop_command = QComboBox()
         self.prop_target_form = QComboBox()
         self.prop_target_page = QComboBox()
-=======
-        self.prop_type = QLineEdit()
-        self.prop_text = QLineEdit()
-        self.prop_requisite = QLineEdit()
-        self.prop_command = QLineEdit()
-        self.prop_target_form = QLineEdit()
-        self.prop_target_page = QLineEdit()
->>>>>>> theirs
         self.prop_x = QLineEdit()
         self.prop_y = QLineEdit()
         self.prop_w = QLineEdit()
@@ -522,7 +461,6 @@ class ConfiguratorWindow(QMainWindow):
         right_layout.addWidget(self.apply_button)
         right_layout.addStretch(1)
 
-<<<<<<< ours
         self.prop_target_form.currentIndexChanged.connect(self._reload_target_pages)
 
         self._build_bottom_tabs()
@@ -565,10 +503,6 @@ class ConfiguratorWindow(QMainWindow):
             """
         )
 
-=======
-        self._build_bottom_tabs()
-
->>>>>>> theirs
     def _build_bottom_tabs(self) -> None:
         self.module_info = QTextEdit()
         self.module_info.setReadOnly(True)
@@ -684,7 +618,6 @@ class ConfiguratorWindow(QMainWindow):
                     "code": "def open_module(module_id):\n    return modules.call(module_id, 'open', {})\n",
                 },
             )
-<<<<<<< ours
         config = deepcopy(self.core.modules.get_module_config(context))
         if context == "sql_console":
             forms = config.get("forms", [])
@@ -692,9 +625,6 @@ class ConfiguratorWindow(QMainWindow):
             if "sql_data" not in page_ids or "sql_terminal" not in page_ids:
                 config = deepcopy(self.core.modules.build_default_config("sql_console"))
         return config
-=======
-        return deepcopy(self.core.modules.get_module_config(context))
->>>>>>> theirs
 
     def _normalize_config(self, config: dict[str, Any]) -> dict[str, Any]:
         data = deepcopy(config)
@@ -759,86 +689,55 @@ class ConfiguratorWindow(QMainWindow):
         return data
 
     def _rebuild_tree(self) -> None:
-<<<<<<< ours
         self._tree_sync = True
         self.tree.clear()
         root = QTreeWidgetItem([self._config.get("title", self._current_context)])
         root.setData(0, Qt.ItemDataRole.UserRole, ("root", self._config))
         self._mark_item_editable(root)
-=======
-        self.tree.clear()
-        root = QTreeWidgetItem([self._config.get("title", self._current_context)])
-        root.setData(0, Qt.ItemDataRole.UserRole, ("root", self._config))
->>>>>>> theirs
         self.tree.addTopLevelItem(root)
 
         forms_root = QTreeWidgetItem(["Forms"])
         forms_root.setData(0, Qt.ItemDataRole.UserRole, ("forms", self._config["forms"]))
-<<<<<<< ours
         self._mark_item_editable(forms_root)
-=======
->>>>>>> theirs
         root.addChild(forms_root)
         for form in self._config["forms"]:
             form_item = QTreeWidgetItem([form["name"]])
             form_item.setData(0, Qt.ItemDataRole.UserRole, ("form", form))
-<<<<<<< ours
             self._mark_item_editable(form_item)
-=======
->>>>>>> theirs
             forms_root.addChild(form_item)
             for page in form["pages"]:
                 page_item = QTreeWidgetItem([page["name"]])
                 page_item.setData(0, Qt.ItemDataRole.UserRole, ("page", page))
-<<<<<<< ours
                 self._mark_item_editable(page_item)
-=======
->>>>>>> theirs
                 form_item.addChild(page_item)
                 for control in page["controls"]:
                     control_item = QTreeWidgetItem([control.get("text") or control["id"]])
                     control_item.setData(0, Qt.ItemDataRole.UserRole, ("control", control))
-<<<<<<< ours
                     self._mark_item_editable(control_item)
-=======
->>>>>>> theirs
                     page_item.addChild(control_item)
 
         req_root = QTreeWidgetItem(["Requisites"])
         req_root.setData(0, Qt.ItemDataRole.UserRole, ("requisites", self._config["requisites"]))
-<<<<<<< ours
         self._mark_item_editable(req_root)
-=======
->>>>>>> theirs
         root.addChild(req_root)
         for item in self._config["requisites"]:
             node = QTreeWidgetItem([item.get("name", "Requisite")])
             node.setData(0, Qt.ItemDataRole.UserRole, ("requisite", item))
-<<<<<<< ours
             self._mark_item_editable(node)
-=======
->>>>>>> theirs
             req_root.addChild(node)
 
         cmd_root = QTreeWidgetItem(["Commands"])
         cmd_root.setData(0, Qt.ItemDataRole.UserRole, ("commands", self._config["commands"]))
-<<<<<<< ours
         self._mark_item_editable(cmd_root)
-=======
->>>>>>> theirs
         root.addChild(cmd_root)
         for item in self._config["commands"]:
             node = QTreeWidgetItem([item.get("name", "Command")])
             node.setData(0, Qt.ItemDataRole.UserRole, ("command", item))
-<<<<<<< ours
             self._mark_item_editable(node)
-=======
->>>>>>> theirs
             cmd_root.addChild(node)
 
         style_item = QTreeWidgetItem(["Styles"])
         style_item.setData(0, Qt.ItemDataRole.UserRole, ("styles", self._config["styles"]))
-<<<<<<< ours
         self._mark_item_editable(style_item)
         root.addChild(style_item)
         code_item = QTreeWidgetItem(["Code"])
@@ -859,23 +758,10 @@ class ConfiguratorWindow(QMainWindow):
         self.workspace_mdi.closeAllSubWindows()
         self._designer_tabs.clear()
         self._designer_windows.clear()
-=======
-        root.addChild(style_item)
-        code_item = QTreeWidgetItem(["Code"])
-        code_item.setData(0, Qt.ItemDataRole.UserRole, ("code", {"code": self._config.get("code", "")}))
-        root.addChild(code_item)
-        self.tree.expandAll()
-        self.tree.setCurrentItem(root)
-
-    def _rebuild_workspace(self) -> None:
-        self.workspace_tabs.clear()
-        self._designer_tabs.clear()
->>>>>>> theirs
         for form in self._config["forms"]:
             tab = FormDesignerTab(form)
             tab.selected.connect(self._on_canvas_selected)
             tab.changed.connect(self._on_designer_changed)
-<<<<<<< ours
             self._designer_tabs[form["id"]] = tab
             subwindow = QMdiSubWindow()
             subwindow.setWidget(tab)
@@ -884,10 +770,6 @@ class ConfiguratorWindow(QMainWindow):
             self.workspace_mdi.addSubWindow(subwindow)
             subwindow.show()
             self._designer_windows[form["id"]] = subwindow
-=======
-            self.workspace_tabs.addTab(tab, form["name"])
-            self._designer_tabs[form["id"]] = tab
->>>>>>> theirs
         self.code_editor.setPlainText(self._config.get("code", ""))
 
     def _refresh_lists(self) -> None:
@@ -946,7 +828,6 @@ class ConfiguratorWindow(QMainWindow):
         elif kind == "control":
             self._open_control(payload["id"])
 
-<<<<<<< ours
     def _on_tree_item_renamed(self, item: QTreeWidgetItem, column: int) -> None:
         if self._tree_sync:
             return
@@ -969,8 +850,6 @@ class ConfiguratorWindow(QMainWindow):
         self._refresh_lists()
         self._refresh_module_info()
 
-=======
->>>>>>> theirs
     def _set_selection(self, kind: str, payload: Any) -> None:
         self._node_kind = kind
         self._node_payload = payload
@@ -978,18 +857,9 @@ class ConfiguratorWindow(QMainWindow):
 
     def _fill_properties(self, kind: str, payload: Any) -> None:
         self.prop_name.setText(payload.get("name", payload.get("title", "")) if isinstance(payload, dict) else "")
-<<<<<<< ours
         self._set_combo_value(self.prop_type, payload.get("type", kind) if isinstance(payload, dict) else kind)
         self.prop_text.setText(payload.get("text", payload.get("title", "")) if isinstance(payload, dict) else "")
         self._reload_property_sources(payload if isinstance(payload, dict) else {})
-=======
-        self.prop_type.setText(payload.get("type", kind) if isinstance(payload, dict) else kind)
-        self.prop_text.setText(payload.get("text", payload.get("title", "")) if isinstance(payload, dict) else "")
-        self.prop_requisite.setText(payload.get("requisite", "") if isinstance(payload, dict) else "")
-        self.prop_command.setText(payload.get("command", payload.get("handler", "")) if isinstance(payload, dict) else "")
-        self.prop_target_form.setText(payload.get("target_form", "") if isinstance(payload, dict) else "")
-        self.prop_target_page.setText(payload.get("target_page", "") if isinstance(payload, dict) else "")
->>>>>>> theirs
         self.prop_x.setText(str(payload.get("x", "")) if isinstance(payload, dict) else "")
         self.prop_y.setText(str(payload.get("y", "")) if isinstance(payload, dict) else "")
         self.prop_w.setText(str(payload.get("w", payload.get("width", ""))) if isinstance(payload, dict) else "")
@@ -1005,7 +875,6 @@ class ConfiguratorWindow(QMainWindow):
         else:
             self.prop_value.setPlainText("")
 
-<<<<<<< ours
     def _reload_property_sources(self, payload: dict[str, Any]) -> None:
         self._fill_combo(self.prop_requisite, [""] + [item.get("name", "") for item in self._config.get("requisites", [])], payload.get("requisite", ""))
         self._fill_combo(self.prop_command, [""] + [item.get("name", "") for item in self._config.get("commands", [])], payload.get("command", payload.get("handler", "")))
@@ -1032,13 +901,6 @@ class ConfiguratorWindow(QMainWindow):
             return
         self.workspace_mdi.setActiveSubWindow(window)
         window.showNormal()
-=======
-    def _open_form_tab(self, form_id: str) -> None:
-        tab = self._designer_tabs.get(form_id)
-        if tab is None:
-            return
-        self.workspace_tabs.setCurrentWidget(tab)
->>>>>>> theirs
 
     def _open_page(self, page_id: str) -> None:
         for form in self._config["forms"]:
@@ -1046,13 +908,9 @@ class ConfiguratorWindow(QMainWindow):
                 if page["id"] == page_id:
                     tab = self._designer_tabs.get(form["id"])
                     if tab:
-<<<<<<< ours
                         window = self._designer_windows.get(form["id"])
                         if window:
                             self.workspace_mdi.setActiveSubWindow(window)
-=======
-                        self.workspace_tabs.setCurrentWidget(tab)
->>>>>>> theirs
                         tab.page_selector.setCurrentIndex(index)
                     return
 
@@ -1063,13 +921,9 @@ class ConfiguratorWindow(QMainWindow):
                     if control["id"] == control_id:
                         tab = self._designer_tabs.get(form["id"])
                         if tab:
-<<<<<<< ours
                             window = self._designer_windows.get(form["id"])
                             if window:
                                 self.workspace_mdi.setActiveSubWindow(window)
-=======
-                            self.workspace_tabs.setCurrentWidget(tab)
->>>>>>> theirs
                             tab.page_selector.setCurrentIndex(page_index)
                             tab.canvas.select_control(control_id)
                         return
@@ -1090,7 +944,6 @@ class ConfiguratorWindow(QMainWindow):
         self._refresh_module_info()
         self._open_form_tab(form["id"])
 
-<<<<<<< ours
     def create_module_from_configurator(self) -> None:
         module_id, ok = QInputDialog.getText(self, "Create module", "Module ID (latin, underscore)")
         if not ok or not module_id.strip():
@@ -1106,8 +959,6 @@ class ConfiguratorWindow(QMainWindow):
         self.core.modules.discover()
         QMessageBox.information(self, "Create module", f"Module '{module_id.strip()}' created.")
 
-=======
->>>>>>> theirs
     def add_requisite(self) -> None:
         self._config["requisites"].append({"name": f"Requisite{len(self._config['requisites']) + 1}", "type": "String", "default": ""})
         self._refresh_lists()
@@ -1166,18 +1017,11 @@ class ConfiguratorWindow(QMainWindow):
 
         if kind == "control":
             payload["text"] = self.prop_text.text()
-<<<<<<< ours
             payload["type"] = self.prop_type.currentText() or payload.get("type", "button")
             payload["requisite"] = self.prop_requisite.currentText()
             payload["command"] = self.prop_command.currentText()
             payload["target_form"] = self.prop_target_form.currentText()
             payload["target_page"] = self.prop_target_page.currentText()
-=======
-            payload["requisite"] = self.prop_requisite.text()
-            payload["command"] = self.prop_command.text()
-            payload["target_form"] = self.prop_target_form.text()
-            payload["target_page"] = self.prop_target_page.text()
->>>>>>> theirs
             payload["x"] = self._as_int(self.prop_x.text(), payload.get("x", 0))
             payload["y"] = self._as_int(self.prop_y.text(), payload.get("y", 0))
             payload["w"] = self._as_int(self.prop_w.text(), payload.get("w", 140))
@@ -1192,7 +1036,6 @@ class ConfiguratorWindow(QMainWindow):
             payload["title"] = self.prop_text.text() or payload["title"]
         elif kind == "requisite":
             payload["name"] = self.prop_name.text() or payload["name"]
-<<<<<<< ours
             payload["type"] = self.prop_type.currentText() or payload["type"]
             payload["default"] = self.prop_value.toPlainText()
         elif kind == "command":
@@ -1200,15 +1043,6 @@ class ConfiguratorWindow(QMainWindow):
             payload["handler"] = self.prop_command.currentText() or payload.get("handler", "")
             payload["target_form"] = self.prop_target_form.currentText()
             payload["target_page"] = self.prop_target_page.currentText()
-=======
-            payload["type"] = self.prop_type.text() or payload["type"]
-            payload["default"] = self.prop_value.toPlainText()
-        elif kind == "command":
-            payload["name"] = self.prop_name.text() or payload["name"]
-            payload["handler"] = self.prop_command.text() or payload.get("handler", "")
-            payload["target_form"] = self.prop_target_form.text()
-            payload["target_page"] = self.prop_target_page.text()
->>>>>>> theirs
             payload["parameter"] = self.prop_value.toPlainText()
         elif kind == "styles":
             try:
@@ -1219,14 +1053,8 @@ class ConfiguratorWindow(QMainWindow):
             self._config["code"] = self.prop_value.toPlainText()
             self.code_editor.setPlainText(self._config["code"])
 
-<<<<<<< ours
         for tab in self._designer_tabs.values():
             tab.canvas.render_page()
-=======
-        current_tab = self.workspace_tabs.currentWidget()
-        if isinstance(current_tab, FormDesignerTab):
-            current_tab.canvas.render_page()
->>>>>>> theirs
         self._refresh_lists()
         self._refresh_module_info()
         self._rebuild_tree()
@@ -1248,7 +1076,6 @@ class ConfiguratorWindow(QMainWindow):
             return int(raw)
         except ValueError:
             return fallback
-<<<<<<< ours
 
     @staticmethod
     def _fill_combo(combo: QComboBox, values: list[str], current: str) -> None:
@@ -1264,5 +1091,3 @@ class ConfiguratorWindow(QMainWindow):
         index = combo.findText(value)
         if index >= 0:
             combo.setCurrentIndex(index)
-=======
->>>>>>> theirs
