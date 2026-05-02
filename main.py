@@ -48,24 +48,40 @@ class CustomWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.native_style = QApplication.instance().style().objectName()
-        # 1. НАСТРОЙКИ ГЛАВНОГО ОКНА (Окно-призрак)
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
+        
+        # --- НАСТРОЙКИ АРХИТЕКТУРЫ ДЛЯ ШЕЙДЕРОВ ---
+        self.WOBBLY_MARGIN = 30  # Размер невидимой буферной зоны для "желе"
+        self.RESIZE_MARGIN = 10  # Толщина невидимой рамки для захвата мышью
+        
+        self.setWindowFlags( Qt.WindowType.WindowStaysOnTopHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.resize(500, 400)
-        self.setMinimumSize(150, 100)
         
+        # Физический размер теперь включает отступы
+        self.resize(500 + self.WOBBLY_MARGIN * 2, 400 + self.WOBBLY_MARGIN * 2)
+        self.setMinimumSize(150 + self.WOBBLY_MARGIN * 2, 100 + self.WOBBLY_MARGIN * 2)
         
+        # Центральный виджет - прозрачная основа
+        self.central_widget = QWidget(self)
+        self.central_widget.setStyleSheet("background: transparent;")
+        self.setCentralWidget(self.central_widget)
 
-        
-        self.main_container = QFrame(self)
-        self.setCentralWidget(self.main_container)
+        # Layout, который создает буферную зону
+        self.main_layout = QVBoxLayout(self.central_widget)
+        self.main_layout.setContentsMargins(
+            self.WOBBLY_MARGIN, self.WOBBLY_MARGIN, 
+            self.WOBBLY_MARGIN, self.WOBBLY_MARGIN
+        )
 
-        
+        # Сам видимый интерфейс
+        self.main_container = QFrame(self.central_widget)
+        self.main_layout.addWidget(self.main_container)
+
         self.phantom = PhantomWindow()
         self.on_edge = False
         self.setMouseTracking(True)
-        self.MARGIN = 15
         self.main_container.setMouseTracking(True)
+        self.central_widget.setMouseTracking(True)
+        
         self.state = 1
         self.setstate(self.state)
 
@@ -73,7 +89,12 @@ class CustomWindow(QMainWindow):
         self.state = state
         
         if state == 1:
-            QApplication.instance().setStyle(self.native_style)
+            QApplication.instance().setStyle("Fusion")
+            # Включаем буферную зону
+            self.main_layout.setContentsMargins(
+                self.WOBBLY_MARGIN, self.WOBBLY_MARGIN, 
+                self.WOBBLY_MARGIN, self.WOBBLY_MARGIN
+            )
             self.main_container.setStyleSheet("""
                 QFrame {
                     background-color: #212121;
@@ -82,23 +103,42 @@ class CustomWindow(QMainWindow):
             """)
         elif state == 2:
             QApplication.setStyle("Fusion")
+            # Отключаем буферную зону, окно прилипает к краю жестко
+            self.main_layout.setContentsMargins(0, 0, 0, 0)
             self.main_container.setStyleSheet("""
                 QFrame {
                     background-color: #ffffff;
                     border-radius: 0px; 
                 }
             """)
-            self.setGeometry((self.phantom.geometry()))
-
+            # ВОЗВРАЩЕНО ИЗ ТВОЕГО КОДА: жесткая геометрия из словаря
+            self.setGeometry(
+                self.statesize[2][2], 
+                self.statesize[2][3], 
+                self.statesize[2][0], 
+                self.statesize[2][1]
+            )
 
     def _get_resize_edge(self, pos: QPoint):
-        rect = self.rect()
         x, y = pos.x(), pos.y()
+        w, h = self.width(), self.height()
         
-        is_top = y <= self.MARGIN
-        is_bottom = y >= rect.height() - self.MARGIN
-        is_left = x <= self.MARGIN
-        is_right = x >= rect.width() - self.MARGIN
+        # Рассчитываем видимые края (с учетом текущих отступов)
+        margins = self.main_layout.contentsMargins()
+        v_left = margins.left()
+        v_right = w - margins.right()
+        v_top = margins.top()
+        v_bottom = h - margins.bottom()
+        
+        # Если клик совсем за пределами видимого окна (в пустом желе) - игнорируем
+        if x < v_left - 5 or x > v_right + 5 or y < v_top - 5 or y > v_bottom + 5:
+            return None
+            
+        # Проверяем близость к видимым краям
+        is_left = abs(x - v_left) <= self.RESIZE_MARGIN
+        is_right = abs(x - v_right) <= self.RESIZE_MARGIN
+        is_top = abs(y - v_top) <= self.RESIZE_MARGIN
+        is_bottom = abs(y - v_bottom) <= self.RESIZE_MARGIN
         
         if is_top and is_left: return Qt.Edge.TopEdge | Qt.Edge.LeftEdge
         if is_top and is_right: return Qt.Edge.TopEdge | Qt.Edge.RightEdge
@@ -120,7 +160,7 @@ class CustomWindow(QMainWindow):
             if self.state == 2:
                 self.setstate(1)
                 
-                # Достаем старые габариты
+                # ВОЗВРАЩЕНО ИЗ ТВОЕГО КОДА: берем старые габариты из словаря
                 old_w, old_h, x_pct, y_pct = self.statesize[1]
                 
                 # Центрируем окно под курсором
@@ -134,7 +174,10 @@ class CustomWindow(QMainWindow):
                 if edge is not None:
                     self.windowHandle().startSystemResize(edge)
                 else:
-                    self.windowHandle().startSystemMove()
+                    margins = self.main_layout.contentsMargins()
+                    if (event.position().x() >= margins.left() and event.position().x() <= self.width() - margins.right() and
+                        event.position().y() >= margins.top() and event.position().y() <= self.height() - margins.bottom()):
+                        self.windowHandle().startSystemMove()
             
         elif event.button() == Qt.MouseButton.RightButton:
             current_screen = self.screen()
@@ -146,11 +189,7 @@ class CustomWindow(QMainWindow):
             self.close()
 
     def mouseMoveEvent(self, event):
-        if self.state == 2:
-            None
-        elif self.state == 1:
-            
-            
+        if self.state == 1:
             edge = self._get_resize_edge(event.position())
             
             if edge == (Qt.Edge.TopEdge | Qt.Edge.LeftEdge) or edge == (Qt.Edge.BottomEdge | Qt.Edge.RightEdge):
@@ -180,10 +219,8 @@ class CustomWindow(QMainWindow):
             if not self.on_edge:
                 self.on_edge = True
                 self.phantom.setGeometry(
-                    screen_left, 
-                    screen_top, 
-                    screen_width // 4, 
-                    screen_height
+                    screen_left, screen_top, 
+                    screen_width // 4, screen_height
                 )
                 self.phantom.show()
                 
@@ -191,10 +228,8 @@ class CustomWindow(QMainWindow):
             if not self.on_edge:
                 self.on_edge = True
                 self.phantom.setGeometry(
-                    screen_right - (screen_width // 4), 
-                    screen_top, 
-                    screen_width // 4, 
-                    screen_height
+                    screen_right - (screen_width // 4), screen_top, 
+                    screen_width // 4, screen_height
                 )
                 self.phantom.show()
                 
@@ -210,18 +245,16 @@ class CustomWindow(QMainWindow):
             # Магнитимся к краю
             if self.on_edge and self.state == 1:
                 
-                # Запоминаем текущий размер
+                # ВОЗВРАЩЕНО ИЗ ТВОЕГО КОДА: сохраняем текущий размер в словарь
                 w = self.width()
                 h = self.height()
                 self.statesize[1] = (w, h, 0, 0)
 
-                # Меняем состояние (цвета и углы) и размер
+                # Меняем состояние (отступы уберутся, применится statesize[2])
                 self.setstate(2)
-                
                 
                 self.phantom.hide()
                 self.on_edge = False
-
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     window = CustomWindow()
