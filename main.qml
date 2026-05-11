@@ -7,6 +7,13 @@ Window {
     flags: Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
 
     property var sgStart
+    property int snappedEdge: 0 // 0 = none, 1 = left, 2 = right
+    
+    // Сохраненные размеры в процентах от экрана
+    property real floatWPct: 0.25
+    property real floatHPct: 0.40
+    property real snapWPct: 0.20
+    property real snapHPct: 1.0
     
     Component.onCompleted: {
         var vg = SysHelper.virtualGeometry()
@@ -20,9 +27,9 @@ Window {
         var sg = SysHelper.screenGeometry(g.x, g.y)
         sgStart = sg
         
-        // Размеры по процентам от текущего экрана (например 25% на 40%)
-        var startW = Math.round(sg.width * 0.25)
-        var startH = Math.round(sg.height * 0.4)
+        // Размеры по сохраненным процентам
+        var startW = Math.round(sg.width * floatWPct)
+        var startH = Math.round(sg.height * floatHPct)
         
         var startX = (sg.x - root.x) + (sg.width - startW) / 2
         var startY = (sg.y - root.y) + (sg.height - startH) / 2
@@ -119,15 +126,22 @@ Window {
         property int anchorX; property int anchorY
         property int offX; property int offY
 
-        function getEdge(lx, ly) {
-            var relX = lx - curX; var relY = ly - curY
-            if (relX < -25 || relX > curW + 25 || relY < -25 || relY > curH + 25) return 0
-            var l = relX <= resizeMargin; var r = relX >= curW - resizeMargin
-            var t = relY <= resizeMargin; var b = relY >= curH - resizeMargin
-            var e = 0
-            if (t) e |= 1; if (b) e |= 2; if (l) e |= 4; if (r) e |= 8
-            return e
+    function getEdge(lx, ly) {
+        var relX = lx - curX; var relY = ly - curY
+        if (relX < -25 || relX > curW + 25 || relY < -25 || relY > curH + 25) return 0
+        var l = relX <= resizeMargin; var r = relX >= curW - resizeMargin
+        var t = relY <= resizeMargin; var b = relY >= curH - resizeMargin
+        var e = 0
+        
+        // Запрет ресайза со стороны приклеенного края
+        if (appState === 2) {
+            if (snappedEdge === 1) l = false // Приклеены слева - нельзя тянуть левый край
+            if (snappedEdge === 2) r = false // Приклеены справа - нельзя тянуть правый край
         }
+        
+        if (t) e |= 1; if (b) e |= 2; if (l) e |= 4; if (r) e |= 8
+        return e
+    }
 
         onPressed: (mouse) => {
             // ИСПОЛЬЗУЕМ ВСТРОЕННЫЕ КООРДИНАТЫ MOUSEAREA
@@ -139,8 +153,8 @@ Window {
             if (mouse.button === Qt.RightButton) {
                 appState = 1; 
                 var sg = SysHelper.screenGeometry(localX + root.x, localY + root.y)
-                var resetW = Math.round(sg.width * 0.25)
-                var resetH = Math.round(sg.height * 0.4)
+                var resetW = Math.round(sg.width * floatWPct)
+                var resetH = Math.round(sg.height * floatHPct)
                 tarW = resetW; tarH = resetH
                 tarX = (sg.x - root.x) + (sg.width - resetW) / 2
                 tarY = (sg.y - root.y) + (sg.height - resetH) / 2
@@ -157,8 +171,8 @@ Window {
                 if (appState === 2) {
                     appState = 1
                     var sg2 = SysHelper.screenGeometry(localX + root.x, localY + root.y)
-                    tarW = Math.round(sg2.width * 0.25)
-                    tarH = Math.round(sg2.height * 0.4)
+                    tarW = Math.round(sg2.width * floatWPct)
+                    tarH = Math.round(sg2.height * floatHPct)
                     tarX = localX - tarW/2
                     tarY = localY - tarH/2
                     curX = tarX; curY = tarY; curW = tarW; curH = tarH
@@ -196,6 +210,18 @@ Window {
         }
 
         onReleased: {
+            if (currentAction !== 0 && currentAction !== -1) {
+                // Если мы только что меняли размер
+                var sgSize = SysHelper.screenGeometry(curX + root.x + curW/2, curY + root.y + curH/2)
+                if (appState === 1) {
+                    floatWPct = curW / sgSize.width
+                    floatHPct = curH / sgSize.height
+                } else if (appState === 2) {
+                    snapWPct = curW / sgSize.width
+                    snapHPct = curH / sgSize.height
+                }
+            }
+
             if (currentAction === -1 && onEdge) {
                 appState = 2
                 tarW = phantom.width; tarH = phantom.height
@@ -213,22 +239,30 @@ Window {
         var sg = SysHelper.screenGeometry(globalX, globalY)
         var local_x = sg.x - root.x
         var local_y = sg.y - root.y
-        var sw = Math.round(sg.width * 0.2) // 20% ширины
+        var sw = Math.round(sg.width * snapWPct) // ширина из сохраненного процента
+        var sh = Math.round(sg.height * snapHPct) // высота из сохраненного процента
+        
+        // Позиция фантома по Y центрируется по курсору мыши, но не вылезает за экран
+        var py = (globalY - root.y) - sh/2
+        py = Math.max(local_y, Math.min(local_y + sg.height - sh, py))
         
         if (globalX <= sg.x + 50) {
             onEdge = true
+            snappedEdge = 1 // левый край
             phantom.x = local_x
-            phantom.y = local_y
+            phantom.y = py
             phantom.width = sw
-            phantom.height = sg.height // 100% высоты
+            phantom.height = sh
         } else if (globalX >= sg.x + sg.width - 50) {
             onEdge = true
+            snappedEdge = 2 // правый край
             phantom.x = local_x + sg.width - sw
-            phantom.y = local_y
+            phantom.y = py
             phantom.width = sw
-            phantom.height = sg.height
+            phantom.height = sh
         } else {
             onEdge = false
+            snappedEdge = 0
         }
     }
 
