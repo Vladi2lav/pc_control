@@ -99,13 +99,35 @@ Window {
     Timer {
         interval: 16; running: true; repeat: true
         onTriggered: {
-            velX = (velX + (tarX - curX) * tension) * damping
-            velY = (velY + (tarY - curY) * tension) * damping
-            velW = (velW + (tarW - curW) * tension) * damping
-            velH = (velH + (tarH - curH) * tension) * damping
+            var threshold = 0.5
             
-            curX += velX; curY += velY
-            curW += velW; curH += velH
+            // X axis
+            if (Math.abs(tarX - curX) < threshold && Math.abs(velX) < threshold) {
+                if (curX !== tarX) curX = tarX; velX = 0
+            } else {
+                velX = (velX + (tarX - curX) * tension) * damping; curX += velX
+            }
+            
+            // Y axis
+            if (Math.abs(tarY - curY) < threshold && Math.abs(velY) < threshold) {
+                if (curY !== tarY) curY = tarY; velY = 0
+            } else {
+                velY = (velY + (tarY - curY) * tension) * damping; curY += velY
+            }
+            
+            // Width
+            if (Math.abs(tarW - curW) < threshold && Math.abs(velW) < threshold) {
+                if (curW !== tarW) curW = tarW; velW = 0
+            } else {
+                velW = (velW + (tarW - curW) * tension) * damping; curW += velW
+            }
+            
+            // Height
+            if (Math.abs(tarH - curH) < threshold && Math.abs(velH) < threshold) {
+                if (curH !== tarH) curH = tarH; velH = 0
+            } else {
+                velH = (velH + (tarH - curH) * tension) * damping; curH += velH
+            }
         }
     }
 
@@ -129,12 +151,38 @@ Window {
         radius: appState === 1 ? 8 : 0
         z: 2; clip: true
 
-        Text {
-            anchors.centerIn: parent
-            text: appState === 3 ? "" : "Fixed Ghost & Click-through\nWidth: 20% | Height: 100%"
-            color: appState === 1 ? "white" : "black"
+        Item {
+            anchors.top: parent.top
+            anchors.topMargin: 40 // отступ под верхнюю панель
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
             opacity: appState === 3 ? 0 : 1
             Behavior on opacity { NumberAnimation { duration: 200 } }
+
+            // Интерфейс для 1 состояния (Плавающее)
+            Item {
+                anchors.fill: parent
+                visible: appState === 1
+                Text {
+                    anchors.centerIn: parent
+                    text: "ПЛАВАЮЩИЙ ИНТЕРФЕЙС (1)"
+                    color: "white"
+                    font.pixelSize: 16
+                }
+            }
+
+            // Интерфейс для 2 состояния (Прилепленное)
+            Item {
+                anchors.fill: parent
+                visible: appState === 2
+                Text {
+                    anchors.centerIn: parent
+                    text: "ПРИЛЕПЛЕННЫЙ ИНТЕРФЕЙС (2)"
+                    color: "black"
+                    font.pixelSize: 16
+                }
+            }
         }
     }
 
@@ -255,7 +303,7 @@ Window {
             }
         }
 
-        onReleased: {
+        onReleased: (mouse) => {
             if (currentAction !== 0 && currentAction !== -1) {
                 // Если мы только что меняли размер
                 var sgSize = SysHelper.screenGeometry(curX + root.x + curW/2, curY + root.y + curH/2)
@@ -292,6 +340,85 @@ Window {
         }
     }
 
+    // --- ВЕРХНЯЯ ПАНЕЛЬ И КНОПКИ (ПОВЕРХ MOUSEAREA) ---
+    Item {
+        id: uiLayer
+        x: curX; y: curY; width: curW; height: curH
+        z: 4
+
+        Item {
+            id: titleBarArea
+            width: parent.width
+            height: 40
+            visible: appState === 1 || appState === 2
+            opacity: appState === 3 ? 0 : 1
+            Behavior on opacity { NumberAnimation { duration: 200 } }
+
+            Row {
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.rightMargin: 15
+                spacing: 8
+                Rectangle {
+                    width: 14; height: 14; radius: 7; color: "#27c93f"
+                    MouseArea { 
+                        anchors.fill: parent
+                        onClicked: {
+                            if (appState === 2) {
+                                hideTimer.stop()
+                                appState = 3
+                                var sg = SysHelper.screenGeometry(curX + root.x + curW/2, curY + root.y + curH/2)
+                                var w1 = Math.round(sg.width * 0.01)
+                                if (w1 < 10) w1 = 10
+                                if (snappedEdge === 2) { tarX = curX + curW - w1 }
+                                tarW = w1
+                            } else if (appState === 1) {
+                                root.showMinimized()
+                            }
+                        }
+                    }
+                }
+                // Закрыть
+                Rectangle {
+                    width: 14; height: 14; radius: 7; color: "#ffbd2e"
+                    MouseArea { anchors.fill: parent; onClicked: root.showMinimized() }
+                }
+                Rectangle {
+                    width: 14; height: 14; radius: 7; color: "#ff5f56"
+                    MouseArea { anchors.fill: parent; onClicked: Qt.quit() }
+                }
+                // Спрятать
+                
+            }
+
+            // Выпадающее меню (3 точки)
+            Rectangle {
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.leftMargin: 15
+                width: 30; height: 30; radius: 4
+                color: dotsMouse.containsMouse ? (appState === 1 ? "#444" : "#eee") : "transparent"
+                
+                Text {
+                    anchors.centerIn: parent
+                    text: "⋮"
+                    font.pixelSize: 32
+                    color: appState === 1 ? "white" : "black"
+                    font.bold: true
+                }
+                
+                MouseArea {
+                    id: dotsMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onClicked: {
+                        console.log("Открыто выпадающее меню")
+                    }
+                }
+            }
+        }
+    }
+
     function checkSnap(globalX, globalY) {
         var sg = SysHelper.screenGeometry(globalX, globalY)
         var local_x = sg.x - root.x
@@ -323,33 +450,5 @@ Window {
         }
     }
 
-    // --- АВТОМАТИЧЕСКИЙ ТЕСТ И ЛОГИРОВАНИЕ ---
-    Timer {
-        id: autoTestTimer
-        interval: 1000
-        running: true
-        repeat: true
-        property int tick: 0
-        onTriggered: {
-            tick++
-            console.log("[LOG] Tick:", tick, "| Virtual root window geometry:", root.x, root.y, root.width, root.height, "| Container local pos:", curX, curY)
-            
-            if (tick === 2) {
-                console.log("[LOG] Starting automated movement test. Moving container smoothly to Screen 2...")
-                tarX = root.width - curW - 200 // Move to far right
-            }
-            if (tick === 6) {
-                console.log("[LOG] Snap test. Simulating cursor hitting right edge...")
-                checkSnap(root.x + root.width, root.y + 500)
-                if (onEdge) {
-                    console.log("[LOG] Snap detected successfully at: ", phantom.x, phantom.y)
-                }
-            }
-            if (tick === 9) {
-                console.log("[LOG] Automated test finished. Stopping test timer.")
-                onEdge = false
-                autoTestTimer.running = false
-            }
-        }
-    }
+
 }
