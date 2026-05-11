@@ -8,6 +8,7 @@ Window {
 
     property var sgStart
     property int snappedEdge: 0 // 0 = none, 1 = left, 2 = right
+    property bool isInside: false
     
     // Сохраненные размеры в процентах от экрана
     property real floatWPct: 0.25
@@ -61,6 +62,25 @@ Window {
     property int resizeMargin: 15
     property bool onEdge: false
     
+    Timer {
+        id: hideTimer
+        interval: 500
+        repeat: false
+        onTriggered: {
+            if (appState === 2 && mouseArea.currentAction === 0) {
+                appState = 3
+                var sg = SysHelper.screenGeometry(curX + root.x + curW/2, curY + root.y + curH/2)
+                var w1 = Math.round(sg.width * 0.01)
+                if (w1 < 10) w1 = 10 // минимальная ширина
+                
+                if (snappedEdge === 2) {
+                    tarX = curX + curW - w1
+                }
+                tarW = w1
+            }
+        }
+    }
+    
     // Принудительное обновление маски при любых изменениях
     onCurXChanged: triggerMaskUpdate()
     onCurYChanged: triggerMaskUpdate()
@@ -111,13 +131,16 @@ Window {
 
         Text {
             anchors.centerIn: parent
-            text: "Fixed Ghost & Click-through\nWidth: 20% | Height: 100%"
+            text: appState === 3 ? "" : "Fixed Ghost & Click-through\nWidth: 20% | Height: 100%"
             color: appState === 1 ? "white" : "black"
+            opacity: appState === 3 ? 0 : 1
+            Behavior on opacity { NumberAnimation { duration: 200 } }
         }
     }
 
 
     MouseArea {
+        id: mouseArea
         anchors.fill: parent
         hoverEnabled: true
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
@@ -127,6 +150,7 @@ Window {
         property int offX; property int offY
 
     function getEdge(lx, ly) {
+        if (appState === 3) return 0
         var relX = lx - curX; var relY = ly - curY
         if (relX < -25 || relX > curW + 25 || relY < -25 || relY > curH + 25) return 0
         var l = relX <= resizeMargin; var r = relX >= curW - resizeMargin
@@ -168,8 +192,9 @@ Window {
                 anchorX = (edge & 4) ? (curX + curW) : curX
                 anchorY = (edge & 1) ? (curY + curH) : curY
             } else if (localX >= curX - 25 && localX <= curX + curW + 25 && localY >= curY - 25 && localY <= curY + curH + 25) {
-                if (appState === 2) {
+                if (appState === 2 || appState === 3) {
                     appState = 1
+                    hideTimer.stop()
                     var sg2 = SysHelper.screenGeometry(localX + root.x, localY + root.y)
                     tarW = Math.round(sg2.width * floatWPct)
                     tarH = Math.round(sg2.height * floatHPct)
@@ -187,6 +212,27 @@ Window {
         onPositionChanged: (mouse) => {
             var localX = mouse.x
             var localY = mouse.y
+
+            var inside = (localX >= curX && localX <= curX + curW && localY >= curY && localY <= curY + curH)
+            if (inside !== isInside) {
+                isInside = inside
+                if (inside) {
+                    hideTimer.stop()
+                    if (appState === 3) {
+                        appState = 2
+                        var sg3 = SysHelper.screenGeometry(curX + root.x + curW/2, curY + root.y + curH/2)
+                        var sw3 = Math.round(sg3.width * snapWPct)
+                        if (snappedEdge === 2) {
+                            tarX = curX + curW - sw3
+                        }
+                        tarW = sw3
+                    }
+                } else {
+                    if (appState === 2 && currentAction === 0) {
+                        hideTimer.restart()
+                    }
+                }
+            }
 
             if (currentAction === 0) {
                 var e = getEdge(localX, localY)
@@ -230,8 +276,19 @@ Window {
                 curX = tarX; curY = tarY; curW = tarW; curH = tarH
                 velX = 0; velY = 0; velW = 0; velH = 0
                 onEdge = false
+                
+                var insideSnap = (mouse.x >= curX && mouse.x <= curX + curW && mouse.y >= curY && mouse.y <= curY + curH)
+                isInside = insideSnap
+                if (!insideSnap) hideTimer.restart()
             }
             currentAction = 0
+        }
+        
+        onExited: {
+            isInside = false
+            if (appState === 2 && currentAction === 0) {
+                hideTimer.restart()
+            }
         }
     }
 
