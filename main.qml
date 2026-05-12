@@ -144,43 +144,128 @@ Window {
     }
 
 
-    Rectangle {
-        id: mainContainer
+    Item {
+        id: windowWrapper
         x: curX; y: curY; width: curW; height: curH
-        color: appState === 1 ? "#212121" : "#ffffff"
-        radius: appState === 1 ? 8 : 0
-        z: 2; clip: true
+        z: 2
 
-        Item {
-            anchors.top: parent.top
-            anchors.topMargin: 40 // отступ под верхнюю панель
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            opacity: appState === 3 ? 0 : 1
-            Behavior on opacity { NumberAnimation { duration: 200 } }
+        Rectangle {
+            id: mainContainer
+            anchors.fill: parent
+            color: appState === 1 ? "#212121" : "#ffffff"
+            radius: appState === 1 ? 8 : 0
+            clip: true
 
-            // Интерфейс для 1 состояния (Плавающее)
             Item {
-                anchors.fill: parent
-                visible: appState === 1
-                Text {
-                    anchors.centerIn: parent
-                    text: "ПЛАВАЮЩИЙ ИНТЕРФЕЙС (1)"
-                    color: "white"
-                    font.pixelSize: 16
+                anchors.top: parent.top
+                anchors.topMargin: 40 // отступ под верхнюю панель
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                opacity: appState === 3 ? 0 : 1
+                Behavior on opacity { NumberAnimation { duration: 200 } }
+
+                // Интерфейс для 1 состояния (Плавающее)
+                Item {
+                    anchors.fill: parent
+                    visible: appState === 1
+                    Text {
+                        anchors.centerIn: parent
+                        text: ""
+                        color: "white"
+                        font.pixelSize: 16
+                    }
+                }
+
+                // Интерфейс для 2 состояния (Прилепленное)
+                Item {
+                    anchors.fill: parent
+                    visible: appState === 2
+                    Text {
+                        anchors.centerIn: parent
+                        text: ""
+                        color: "black"
+                        font.pixelSize: 16
+                    }
                 }
             }
+        }
 
-            // Интерфейс для 2 состояния (Прилепленное)
+        // --- ВЕРХНЯЯ ПАНЕЛЬ И КНОПКИ ---
+        Item {
+            id: uiLayer
+            anchors.fill: parent
+            z: 4
+
             Item {
-                anchors.fill: parent
-                visible: appState === 2
-                Text {
-                    anchors.centerIn: parent
-                    text: "ПРИЛЕПЛЕННЫЙ ИНТЕРФЕЙС (2)"
-                    color: "black"
-                    font.pixelSize: 16
+                id: titleBarArea
+                width: parent.width
+                height: 40
+                visible: appState === 1 || appState === 2
+                opacity: appState === 3 ? 0 : 1
+                Behavior on opacity { NumberAnimation { duration: 200 } }
+
+                Row {
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.rightMargin: 15
+                    spacing: 8
+                    Rectangle {
+                        width: 14; height: 14; radius: 7; color: "#27c93f"
+                        MouseArea { 
+                            anchors.fill: parent
+                            onClicked: {
+                                if (appState === 2) {
+                                    hideTimer.stop()
+                                    appState = 3
+                                    var sg = SysHelper.screenGeometry(curX + root.x + curW/2, curY + root.y + curH/2)
+                                    var w1 = Math.round(sg.width * 0.01)
+                                    if (w1 < 10) w1 = 10
+                                    if (snappedEdge === 2) { tarX = curX + curW - w1 }
+                                    tarW = w1
+                                } else if (appState === 1) {
+                                    root.showMinimized()
+                                }
+                            }
+                        }
+                    }
+                    // Закрыть
+                    Rectangle {
+                        width: 14; height: 14; radius: 7; color: "#ffbd2e"
+                        MouseArea { anchors.fill: parent; onClicked: root.showMinimized() }
+                    }
+                    Rectangle {
+                        width: 14; height: 14; radius: 7; color: "#ff5f56"
+                        MouseArea { anchors.fill: parent; onClicked: Qt.quit() }
+                    }
+                    // Спрятать
+                    
+                }
+
+                // Выпадающее меню (3 точки)
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.leftMargin: 15
+                    width: 30; height: 30; radius: 4
+                    color: dotsMouse.containsMouse ? (appState === 1 ? "#444" : "#eee") : "transparent"
+                    
+                    Text {
+                        anchors.centerIn: parent
+                        text: "⋮"
+                        font.pixelSize: 32
+                        color: appState === 1 ? "white" : "black"
+                        font.bold: true
+                    }
+                    
+                    MouseArea {
+                        id: dotsMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onClicked: {
+                            console.log("Открыто выпадающее меню")
+                        }
+                    }
                 }
             }
         }
@@ -340,84 +425,7 @@ Window {
         }
     }
 
-    // --- ВЕРХНЯЯ ПАНЕЛЬ И КНОПКИ (ПОВЕРХ MOUSEAREA) ---
-    Item {
-        id: uiLayer
-        x: curX; y: curY; width: curW; height: curH
-        z: 4
 
-        Item {
-            id: titleBarArea
-            width: parent.width
-            height: 40
-            visible: appState === 1 || appState === 2
-            opacity: appState === 3 ? 0 : 1
-            Behavior on opacity { NumberAnimation { duration: 200 } }
-
-            Row {
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.rightMargin: 15
-                spacing: 8
-                Rectangle {
-                    width: 14; height: 14; radius: 7; color: "#27c93f"
-                    MouseArea { 
-                        anchors.fill: parent
-                        onClicked: {
-                            if (appState === 2) {
-                                hideTimer.stop()
-                                appState = 3
-                                var sg = SysHelper.screenGeometry(curX + root.x + curW/2, curY + root.y + curH/2)
-                                var w1 = Math.round(sg.width * 0.01)
-                                if (w1 < 10) w1 = 10
-                                if (snappedEdge === 2) { tarX = curX + curW - w1 }
-                                tarW = w1
-                            } else if (appState === 1) {
-                                root.showMinimized()
-                            }
-                        }
-                    }
-                }
-                // Закрыть
-                Rectangle {
-                    width: 14; height: 14; radius: 7; color: "#ffbd2e"
-                    MouseArea { anchors.fill: parent; onClicked: root.showMinimized() }
-                }
-                Rectangle {
-                    width: 14; height: 14; radius: 7; color: "#ff5f56"
-                    MouseArea { anchors.fill: parent; onClicked: Qt.quit() }
-                }
-                // Спрятать
-                
-            }
-
-            // Выпадающее меню (3 точки)
-            Rectangle {
-                anchors.left: parent.left
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.leftMargin: 15
-                width: 30; height: 30; radius: 4
-                color: dotsMouse.containsMouse ? (appState === 1 ? "#444" : "#eee") : "transparent"
-                
-                Text {
-                    anchors.centerIn: parent
-                    text: "⋮"
-                    font.pixelSize: 32
-                    color: appState === 1 ? "white" : "black"
-                    font.bold: true
-                }
-                
-                MouseArea {
-                    id: dotsMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    onClicked: {
-                        console.log("Открыто выпадающее меню")
-                    }
-                }
-            }
-        }
-    }
 
     function checkSnap(globalX, globalY) {
         var sg = SysHelper.screenGeometry(globalX, globalY)
