@@ -1,5 +1,7 @@
 import QtQuick
 import QtQuick.Window
+import QtQuick.Controls
+import QtQuick.Layouts
 
 Window {
     id: root
@@ -165,27 +167,131 @@ Window {
                 opacity: appState === 3 ? 0 : 1
                 Behavior on opacity { NumberAnimation { duration: 200 } }
 
-                // Интерфейс для 1 состояния (Плавающее)
+                // Интерфейс для плавающего и примагниченного состояний (показывает список модулей)
                 Item {
+                    id: floatingStateItem
                     anchors.fill: parent
-                    visible: appState === 1
-                    Text {
-                        anchors.centerIn: parent
-                        text: ""
-                        color: "white"
-                        font.pixelSize: 16
+                    visible: appState === 1 || appState === 2
+                    
+                    ListModel { id: appModulesModel }
+                    Component.onCompleted: {
+                        var mods = SysHelper.getModules();
+                        for (var i = 0; i < mods.length; i++) {
+                            appModulesModel.append({"name": mods[i]});
+                        }
                     }
-                }
+                    
+                    GridView {
+                        anchors.fill: parent
+                        anchors.margins: 15
+                        cellWidth: 80; cellHeight: 90
+                        model: appModulesModel
+                        delegate: Item {
+                            width: 80; height: 90
+                            Rectangle {
+                                width: 50; height: 50
+                                radius: 10
+                                color: moduleMouse.containsMouse ? (appState === 1 ? "#555" : "#ddd") : (appState === 1 ? "#444" : "#f0f0f0")
+                                border.color: appState === 1 ? "transparent" : "#ccc"
+                                border.width: appState === 1 ? 0 : 1
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                Text { text: "📦"; font.pixelSize: 24; anchors.centerIn: parent }
+                                MouseArea {
+                                    id: moduleMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                    onClicked: (mouse) => {
+                                        if (mouse.button === Qt.RightButton) {
+                                            moduleContextMenu.popup()
+                                        } else {
+                                            SysHelper.runModule(model.name)
+                                        }
+                                    }
+                                }
+                                
+                                Menu {
+                                    id: moduleContextMenu
+                                    MenuItem {
+                                        text: "Отредактировать"
+                                        onTriggered: SysHelper.editModule(model.name)
+                                    }
+                                    MenuItem {
+                                        text: "Удалить"
+                                        onTriggered: {
+                                            confirmDeleteDialog.moduleToDelete = model.name
+                                            confirmDeleteDialog.moduleIndexToDelete = index
+                                            confirmDeleteDialog.open()
+                                        }
+                                    }
+                                }
+                            }
+                            Text {
+                                text: model.name
+                                color: appState === 1 ? "white" : "#212121"
+                                width: parent.width
+                                anchors.bottom: parent.bottom
+                                anchors.bottomMargin: 10
+                                horizontalAlignment: Text.AlignHCenter
+                                font.pixelSize: 11
+                                elide: Text.ElideRight
+                            }
+                        }
+                    }
+                    
+                    // Кнопка +
+                    Rectangle {
+                        width: 40; height: 40; radius: 20
+                        color: addMouse.containsMouse ? "#006bb3" : "#007fd4"
+                        anchors.right: parent.right
+                        anchors.bottom: parent.bottom
+                        anchors.margins: 20
+                        Text { text: "+"; color: "white"; font.pixelSize: 24; font.bold: true; anchors.centerIn: parent; anchors.verticalCenterOffset: -2 }
+                        MouseArea {
+                            id: addMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onClicked: addMenu.popup()
+                        }
+                        Menu {
+                            id: addMenu
+                            MenuItem { text: "Создать модуль"; onTriggered: SysHelper.runConfigurator() }
+                            MenuItem { text: "Импортировать исходники"; onTriggered: console.log("Import source") }
+                            MenuItem { text: "Импортировать модуль"; onTriggered: console.log("Import exe") }
+                        }
+                    }
 
-                // Интерфейс для 2 состояния (Прилепленное)
-                Item {
-                    anchors.fill: parent
-                    visible: appState === 2
-                    Text {
+                    Dialog {
+                        id: confirmDeleteDialog
+                        title: "Подтверждение"
                         anchors.centerIn: parent
-                        text: ""
-                        color: "black"
-                        font.pixelSize: 16
+                        modal: true
+                        standardButtons: Dialog.Ok | Dialog.Cancel
+                        
+                        property string moduleToDelete: ""
+                        property int moduleIndexToDelete: -1
+
+                        contentItem: Text {
+                            text: "Вы действительно хотите удалить модуль '" + confirmDeleteDialog.moduleToDelete + "'?"
+                            color: appState === 1 ? "white" : "#212121"
+                            font.pixelSize: 13
+                            wrapMode: Text.WordWrap
+                        }
+
+                        background: Rectangle {
+                            color: appState === 1 ? "#2d2d2d" : "#f3f3f3"
+                            border.color: appState === 1 ? "#3e3e3e" : "#cccccc"
+                            border.width: 1
+                            radius: 6
+                        }
+
+                        onAccepted: {
+                            if (moduleToDelete !== "") {
+                                if (SysHelper.deleteModule(moduleToDelete)) {
+                                    appModulesModel.remove(moduleIndexToDelete)
+                                }
+                            }
+                        }
                     }
                 }
             }
