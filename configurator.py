@@ -321,6 +321,30 @@ class ConfigHelper(QObject):
         if not os.path.exists(self.primer_dir):
             os.makedirs(self.primer_dir)
 
+    @Slot(QObject, int, int, int, int)
+    def clipCursor(self, window, x, y, width, height):
+        if platform.system() == "Windows":
+            ratio = window.devicePixelRatio() if window else 1.0
+            px = int(round(x * ratio))
+            py = int(round(y * ratio))
+            pwidth = int(round(width * ratio))
+            pheight = int(round(height * ratio))
+            
+            class RECT(ctypes.Structure):
+                _fields_ = [
+                    ("left", ctypes.c_long),
+                    ("top", ctypes.c_long),
+                    ("right", ctypes.c_long),
+                    ("bottom", ctypes.c_long)
+                ]
+            rect = RECT(px, py, px + pwidth, py + pheight)
+            ctypes.windll.user32.ClipCursor(ctypes.byref(rect))
+
+    @Slot()
+    def releaseCursor(self):
+        if platform.system() == "Windows":
+            ctypes.windll.user32.ClipCursor(None)
+
     @Slot(QObject, bool)
     def highlightDocument(self, quick_doc, is_dark):
         doc = quick_doc.textDocument()

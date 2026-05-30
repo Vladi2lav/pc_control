@@ -13,11 +13,18 @@ ApplicationWindow {
     minimumHeight: 600
     flags: Qt.Window
 
+    onActiveChanged: {
+        if (!active && typeof SysHelper !== "undefined") {
+            SysHelper.releaseCursor()
+        }
+    }
+
     property bool isDark: SettingsManager && SettingsManager.theme === "dark"
     property string defEncoding: SettingsManager ? SettingsManager.defaultEncoding : "utf-8"
     
     // Theme colors aligned with Antigravity IDE / VS Code Dark
     property color bgColor: isDark ? "#1e1e1e" : "#ffffff"
+    property color windowBgColor: isDark ? "#212121" : "#fafafa"
     property color panelColor: isDark ? "#252526" : "#f3f3f3"
     property color borderColor: isDark ? "#2b2b2b" : "#dddddd"
     property color textColor: isDark ? "#cccccc" : "#333333"
@@ -1018,7 +1025,7 @@ ApplicationWindow {
                                 z: model.zIndex
                                 visible: !model.isMinimized
                                 
-                                color: bgColor
+                                color: windowBgColor
                                 border.color: win.activeFocus ? floatingActiveBorder : floatingInactiveBorder
                                 border.width: 1
                                 radius: model.isMaximized ? 0 : 5
@@ -1118,21 +1125,53 @@ ApplicationWindow {
                                     MouseArea {
                                         anchors.fill: parent
                                         anchors.rightMargin: 100
-                                        property int lastX
-                                        property int lastY
+                                        property int startMouseX
+                                        property int startMouseY
+                                        property int startWinX
+                                        property int startWinY
+                                        
                                         onPressed: (mouse) => {
-                                            lastX = mouse.x
-                                            lastY = mouse.y
                                             win.forceActiveFocus()
-                                        }
-                                        onPositionChanged: (mouse) => {
-                                            if (pressed && !model.isMaximized) {
-                                                var dx = mouse.x - lastX
-                                                var dy = mouse.y - lastY
-                                                model.editorX = Math.max(0, Math.min(workspace.width - win.width, win.x + dx))
-                                                model.editorY = Math.max(35, Math.min(workspace.height - win.height, win.y + dy))
+                                            if (!model.isMaximized) {
+                                                var globalPos = mapToItem(workspace, mouse.x, mouse.y)
+                                                startMouseX = globalPos.x
+                                                startMouseY = globalPos.y
+                                                startWinX = win.x
+                                                startWinY = win.y
+                                                
+                                                if (typeof SysHelper !== "undefined") {
+                                                    var topOffset = workspaceTabBar.visible ? 35 : 0
+                                                    var globalPos = workspace.mapToGlobal(0, topOffset)
+                                                    SysHelper.clipCursor(mainWindow, globalPos.x, globalPos.y, workspace.width, workspace.height - topOffset)
+                                                }
                                             }
                                         }
+                                        
+                                        onPositionChanged: (mouse) => {
+                                            if (pressed && !model.isMaximized) {
+                                                var globalPos = mapToItem(workspace, mouse.x, mouse.y)
+                                                var topLimit = workspaceTabBar.visible ? 35 : 0
+                                                var clampedMouseX = Math.max(0, Math.min(workspace.width, globalPos.x))
+                                                var clampedMouseY = Math.max(topLimit, Math.min(workspace.height, globalPos.y))
+                                                var clickOffsetX = startMouseX - startWinX
+                                                var clickOffsetY = startMouseY - startWinY
+                                                model.editorX = clampedMouseX - clickOffsetX
+                                                model.editorY = clampedMouseY - clickOffsetY
+                                            }
+                                        }
+                                        
+                                        onReleased: {
+                                            if (typeof SysHelper !== "undefined") {
+                                                SysHelper.releaseCursor()
+                                            }
+                                        }
+                                        
+                                        onCanceled: {
+                                            if (typeof SysHelper !== "undefined") {
+                                                SysHelper.releaseCursor()
+                                            }
+                                        }
+                                        
                                         onDoubleClicked: {
                                             model.isMaximized = !model.isMaximized
                                         }
@@ -1152,7 +1191,7 @@ ApplicationWindow {
                                         color: textColor
                                         font.family: "Consolas, Courier New, monospace"
                                         font.pixelSize: 13
-                                        background: Rectangle { color: bgColor }
+                                        background: Rectangle { color: windowBgColor }
                                         selectByMouse: true
                                         padding: 10
                                         
@@ -1196,14 +1235,22 @@ ApplicationWindow {
                                     // Left
                                     MouseArea {
                                         width: 5; anchors.left: parent.left; anchors.top: parent.top; anchors.bottom: parent.bottom; cursorShape: Qt.SizeHorCursor
-                                        property int startX
-                                        onPressed: (mouse) => { startX = mouse.x; win.forceActiveFocus() }
+                                        property int startMouseX; property int startWinX; property int startWidth
+                                        onPressed: (mouse) => {
+                                            win.forceActiveFocus()
+                                            var gp = mapToItem(workspace, mouse.x, mouse.y)
+                                            startMouseX = gp.x
+                                            startWinX = win.x
+                                            startWidth = win.width
+                                        }
                                         onPositionChanged: (mouse) => {
                                             if (pressed) {
-                                                var dx = mouse.x - startX
-                                                if (win.width - dx >= 300) {
-                                                    model.editorX = win.x + dx
-                                                    model.editorWidth = win.width - dx
+                                                var gp = mapToItem(workspace, mouse.x, mouse.y)
+                                                var dx = gp.x - startMouseX
+                                                var newWidth = startWidth - dx
+                                                if (newWidth >= 300) {
+                                                    model.editorX = startWinX + dx
+                                                    model.editorWidth = newWidth
                                                 }
                                             }
                                         }
@@ -1211,24 +1258,43 @@ ApplicationWindow {
                                     // Right
                                     MouseArea {
                                         width: 5; anchors.right: parent.right; anchors.top: parent.top; anchors.bottom: parent.bottom; cursorShape: Qt.SizeHorCursor
-                                        onPressed: { win.forceActiveFocus() }
+                                        property int startMouseX; property int startWidth
+                                        onPressed: (mouse) => {
+                                            win.forceActiveFocus()
+                                            var gp = mapToItem(workspace, mouse.x, mouse.y)
+                                            startMouseX = gp.x
+                                            startWidth = win.width
+                                        }
                                         onPositionChanged: (mouse) => {
-                                            if (pressed && mouse.x >= 300) {
-                                                model.editorWidth = mouse.x
+                                            if (pressed) {
+                                                var gp = mapToItem(workspace, mouse.x, mouse.y)
+                                                var dx = gp.x - startMouseX
+                                                var newWidth = startWidth + dx
+                                                if (newWidth >= 300) {
+                                                    model.editorWidth = newWidth
+                                                }
                                             }
                                         }
                                     }
                                     // Top
                                     MouseArea {
                                         height: 5; anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; cursorShape: Qt.SizeVerCursor
-                                        property int startY
-                                        onPressed: (mouse) => { startY = mouse.y; win.forceActiveFocus() }
+                                        property int startMouseY; property int startWinY; property int startHeight
+                                        onPressed: (mouse) => {
+                                            win.forceActiveFocus()
+                                            var gp = mapToItem(workspace, mouse.x, mouse.y)
+                                            startMouseY = gp.y
+                                            startWinY = win.y
+                                            startHeight = win.height
+                                        }
                                         onPositionChanged: (mouse) => {
                                             if (pressed) {
-                                                var dy = mouse.y - startY
-                                                if (win.height - dy >= 200) {
-                                                    model.editorY = win.y + dy
-                                                    model.editorHeight = win.height - dy
+                                                var gp = mapToItem(workspace, mouse.x, mouse.y)
+                                                var dy = gp.y - startMouseY
+                                                var newHeight = startHeight - dy
+                                                if (newHeight >= 200) {
+                                                    model.editorY = startWinY + dy
+                                                    model.editorHeight = newHeight
                                                 }
                                             }
                                         }
@@ -1236,27 +1302,54 @@ ApplicationWindow {
                                     // Bottom
                                     MouseArea {
                                         height: 5; anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; cursorShape: Qt.SizeVerCursor
-                                        onPressed: { win.forceActiveFocus() }
+                                        property int startMouseY; property int startHeight
+                                        onPressed: (mouse) => {
+                                            win.forceActiveFocus()
+                                            var gp = mapToItem(workspace, mouse.x, mouse.y)
+                                            startMouseY = gp.y
+                                            startHeight = win.height
+                                        }
                                         onPositionChanged: (mouse) => {
-                                            if (pressed && mouse.y >= 200) {
-                                                model.editorHeight = mouse.y
+                                            if (pressed) {
+                                                var gp = mapToItem(workspace, mouse.x, mouse.y)
+                                                var dy = gp.y - startMouseY
+                                                var newHeight = startHeight + dy
+                                                if (newHeight >= 200) {
+                                                    model.editorHeight = newHeight
+                                                }
                                             }
                                         }
                                     }
                                     // Corner TL
                                     MouseArea {
                                         width: 8; height: 8; anchors.left: parent.left; anchors.top: parent.top; cursorShape: Qt.SizeFDiagCursor
-                                        property int startX; property int startY
-                                        onPressed: (mouse) => { startX = mouse.x; startY = mouse.y; win.forceActiveFocus() }
+                                        property int startMouseX; property int startMouseY
+                                        property int startWinX; property int startWinY
+                                        property int startWidth; property int startHeight
+                                        onPressed: (mouse) => {
+                                            win.forceActiveFocus()
+                                            var gp = mapToItem(workspace, mouse.x, mouse.y)
+                                            startMouseX = gp.x
+                                            startMouseY = gp.y
+                                            startWinX = win.x
+                                            startWinY = win.y
+                                            startWidth = win.width
+                                            startHeight = win.height
+                                        }
                                         onPositionChanged: (mouse) => {
                                             if (pressed) {
-                                                var dx = mouse.x - startX
-                                                var dy = mouse.y - startY
-                                                if (win.width - dx >= 300 && win.height - dy >= 200) {
-                                                    model.editorX = win.x + dx
-                                                    model.editorWidth = win.width - dx
-                                                    model.editorY = win.y + dy
-                                                    model.editorHeight = win.height - dy
+                                                var gp = mapToItem(workspace, mouse.x, mouse.y)
+                                                var dx = gp.x - startMouseX
+                                                var dy = gp.y - startMouseY
+                                                var newWidth = startWidth - dx
+                                                var newHeight = startHeight - dy
+                                                if (newWidth >= 300) {
+                                                    model.editorX = startWinX + dx
+                                                    model.editorWidth = newWidth
+                                                }
+                                                if (newHeight >= 200) {
+                                                    model.editorY = startWinY + dy
+                                                    model.editorHeight = newHeight
                                                 }
                                             }
                                         }
@@ -1264,16 +1357,31 @@ ApplicationWindow {
                                     // Corner TR
                                     MouseArea {
                                         width: 8; height: 8; anchors.right: parent.right; anchors.top: parent.top; cursorShape: Qt.SizeBDiagCursor
-                                        property int startY
-                                        onPressed: (mouse) => { startY = mouse.y; win.forceActiveFocus() }
+                                        property int startMouseX; property int startMouseY
+                                        property int startWinY
+                                        property int startWidth; property int startHeight
+                                        onPressed: (mouse) => {
+                                            win.forceActiveFocus()
+                                            var gp = mapToItem(workspace, mouse.x, mouse.y)
+                                            startMouseX = gp.x
+                                            startMouseY = gp.y
+                                            startWinY = win.y
+                                            startWidth = win.width
+                                            startHeight = win.height
+                                        }
                                         onPositionChanged: (mouse) => {
                                             if (pressed) {
-                                                var dy = mouse.y - startY
-                                                var dx = mouse.x - win.width
-                                                if (win.width + dx >= 300 && win.height - dy >= 200) {
-                                                    model.editorWidth = win.width + dx
-                                                    model.editorY = win.y + dy
-                                                    model.editorHeight = win.height - dy
+                                                var gp = mapToItem(workspace, mouse.x, mouse.y)
+                                                var dx = gp.x - startMouseX
+                                                var dy = gp.y - startMouseY
+                                                var newWidth = startWidth + dx
+                                                var newHeight = startHeight - dy
+                                                if (newWidth >= 300) {
+                                                    model.editorWidth = newWidth
+                                                }
+                                                if (newHeight >= 200) {
+                                                    model.editorY = startWinY + dy
+                                                    model.editorHeight = newHeight
                                                 }
                                             }
                                         }
@@ -1281,16 +1389,31 @@ ApplicationWindow {
                                     // Corner BL
                                     MouseArea {
                                         width: 8; height: 8; anchors.left: parent.left; anchors.bottom: parent.bottom; cursorShape: Qt.SizeBDiagCursor
-                                        property int startX
-                                        onPressed: (mouse) => { startX = mouse.x; win.forceActiveFocus() }
+                                        property int startMouseX; property int startMouseY
+                                        property int startWinX
+                                        property int startWidth; property int startHeight
+                                        onPressed: (mouse) => {
+                                            win.forceActiveFocus()
+                                            var gp = mapToItem(workspace, mouse.x, mouse.y)
+                                            startMouseX = gp.x
+                                            startMouseY = gp.y
+                                            startWinX = win.x
+                                            startWidth = win.width
+                                            startHeight = win.height
+                                        }
                                         onPositionChanged: (mouse) => {
                                             if (pressed) {
-                                                var dx = mouse.x - startX
-                                                var dy = mouse.y - win.height
-                                                if (win.width - dx >= 300 && win.height + dy >= 200) {
-                                                    model.editorX = win.x + dx
-                                                    model.editorWidth = win.width - dx
-                                                    model.editorHeight = win.height + dy
+                                                var gp = mapToItem(workspace, mouse.x, mouse.y)
+                                                var dx = gp.x - startMouseX
+                                                var dy = gp.y - startMouseY
+                                                var newWidth = startWidth - dx
+                                                var newHeight = startHeight + dy
+                                                if (newWidth >= 300) {
+                                                    model.editorX = startWinX + dx
+                                                    model.editorWidth = newWidth
+                                                }
+                                                if (newHeight >= 200) {
+                                                    model.editorHeight = newHeight
                                                 }
                                             }
                                         }
@@ -1298,14 +1421,28 @@ ApplicationWindow {
                                     // Corner BR
                                     MouseArea {
                                         width: 8; height: 8; anchors.right: parent.right; anchors.bottom: parent.bottom; cursorShape: Qt.SizeFDiagCursor
-                                        onPressed: { win.forceActiveFocus() }
+                                        property int startMouseX; property int startMouseY
+                                        property int startWidth; property int startHeight
+                                        onPressed: (mouse) => {
+                                            win.forceActiveFocus()
+                                            var gp = mapToItem(workspace, mouse.x, mouse.y)
+                                            startMouseX = gp.x
+                                            startMouseY = gp.y
+                                            startWidth = win.width
+                                            startHeight = win.height
+                                        }
                                         onPositionChanged: (mouse) => {
                                             if (pressed) {
-                                                var dx = mouse.x - win.width
-                                                var dy = mouse.y - win.height
-                                                if (win.width + dx >= 300 && win.height + dy >= 200) {
-                                                    model.editorWidth = win.width + dx
-                                                    model.editorHeight = win.height + dy
+                                                var gp = mapToItem(workspace, mouse.x, mouse.y)
+                                                var dx = gp.x - startMouseX
+                                                var dy = gp.y - startMouseY
+                                                var newWidth = startWidth + dx
+                                                var newHeight = startHeight + dy
+                                                if (newWidth >= 300) {
+                                                    model.editorWidth = newWidth
+                                                }
+                                                if (newHeight >= 200) {
+                                                    model.editorHeight = newHeight
                                                 }
                                             }
                                         }
@@ -1708,6 +1845,13 @@ ApplicationWindow {
                 var win = openEditorsRepeater.itemAt(i)
                 if (win) {
                     openEditorsModel.setProperty(i, "isMinimized", false)
+                    
+                    // Move to center of workspace
+                    var newX = Math.max(0, Math.round((workspace.width - win.width) / 2))
+                    var newY = Math.max(workspaceTabBar.visible ? 35 : 0, Math.round((workspace.height - win.height) / 2))
+                    openEditorsModel.setProperty(i, "editorX", newX)
+                    openEditorsModel.setProperty(i, "editorY", newY)
+                    
                     bringToFront(win, i)
                     win.forceActiveFocus()
                 }
@@ -1721,18 +1865,19 @@ ApplicationWindow {
             code = SysHelper.readModuleMain(name)
         }
         
-        // Calculate cascade position
-        var offset = 30 * (openEditorsModel.count % 8)
-        var startX = 50 + offset
-        var startY = 40 + offset
+        // Calculate centered position
+        var defaultWidth = 700
+        var defaultHeight = 450
+        var startX = Math.max(0, Math.round((workspace.width - defaultWidth) / 2))
+        var startY = Math.max(workspaceTabBar.visible ? 35 : 0, Math.round((workspace.height - defaultHeight) / 2))
         
         openEditorsModel.append({
             "moduleName": name,
             "codeText": code,
             "editorX": startX,
             "editorY": startY,
-            "editorWidth": 700,
-            "editorHeight": 450,
+            "editorWidth": defaultWidth,
+            "editorHeight": defaultHeight,
             "isMaximized": false,
             "isMinimized": false,
             "zIndex": ++maxZIndex
