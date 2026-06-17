@@ -1,24 +1,23 @@
 """
 ================================================================================
-AI INSTRUCTIONS & FILE LAYOUT (ATTENTION: ALWAYS UPDATE THIS BLOCK AFTER EDITS)
+AI INSTRUCTIONS & SECTION ANCHORS (ATTENTION: ALWAYS KEEP ANCHOR NAMES ON EDITS)
 ================================================================================
 Purpose: This file acts as the backend for the Lumen Configurator UI (QML-based).
 Standard User Folder: Unified under %APPDATA%\Lumen\modules (Roaming AppData).
 
-FILE LAYOUT & SECTION INDEX:
-- L20-L55: Win32 console encoding setups and initial imports.
-- L56-L175: QSyntaxHighlighter (GenericHighlighter) supporting Python and QML syntax formats.
-- L176-L223: Native event filters (Win32NativeEventFilter) for custom borderless titlebar resizing/moving.
-- L224-L274: Theme and default encoding configuration manager (SettingsManager).
-- L275-L376: Native terminal processes runner and manager (TerminalSession, TerminalManager).
-- L377-L1164: Core configurator business logic helper (ConfigHelper). Key slots:
-  - L392: migrate_all_modules() - Scans and relocates legacy form folders under forms/. Creates defaults.
-  - L514: getTreeStructure() - Scans AppData and returns a flat JSON node list for the QML Explorer tree.
-  - L630: createModule() / saveModuleProperties() / readModuleProperties() / deleteModule() - Modules CRUD.
-  - L778: createForm() / saveFormProperties() / readFormProperties() / deleteForm() - Forms CRUD.
-  - L918: readFormFiles() / saveFormFiles() - Reads/writes form QML and Py code files.
-  - L990: createVariable() / saveVariableProperties() / readVariableProperties() / deleteVariable() - Variables CRUD.
-- L1127-L1164: Application entry point and Win32 event filter attachment.
+SECTION ANCHORS INDEX:
+- # === [QSYNTAX_HIGHLIGHTER] ===   QSyntaxHighlighter (GenericHighlighter) code syntax formats.
+- # === [NATIVE_FILTER] ===         Win32NativeEventFilter custom titlebar window moving/resizing.
+- # === [SETTINGS_MANAGER] ===      Theme and default encoding manager (SettingsManager).
+- # === [TERMINAL_MANAGER] ===      Native terminal processes runner & manager (TerminalSession/TerminalManager).
+- # === [CONFIG_HELPER] ===          Core business logic helper slots (ConfigHelper class).
+  - # === [MIGRATION] ===           migrate_all_modules(): relocates legacy form folders & writes defaults.
+  - # === [TREE_STRUCTURE] ===      getTreeStructure(): returns a flat JSON node list for the QML Explorer tree.
+  - # === [MODULES_CRUD] ===        createModule / saveModuleProperties / readModuleProperties / deleteModule.
+  - # === [FORMS_CRUD] ===          createForm / saveFormProperties / readFormProperties / deleteForm.
+  - # === [FORM_FILES_CRUD] ===     readFormFiles / saveFormFiles.
+  - # === [VARIABLES_CRUD] ===      createVariable / saveVariableProperties / readVariableProperties / deleteVariable.
+- # === [APP_ENTRY] ===             Application main loop entry point and NativeEventFilter install.
 ================================================================================
 """
 
@@ -68,6 +67,7 @@ HTBOTTOM = 15
 HTBOTTOMLEFT = 16
 HTBOTTOMRIGHT = 17
 
+# === [NATIVE_FILTER] ===
 class MSG(ctypes.Structure):
     _fields_ = [
         ("hwnd", wintypes.HWND),
@@ -78,6 +78,7 @@ class MSG(ctypes.Structure):
         ("pt", wintypes.POINT),
     ]
 
+# === [QSYNTAX_HIGHLIGHTER] ===
 class GenericHighlighter(QSyntaxHighlighter):
     def __init__(self, parent=None, is_dark=True, language="python"):
         super().__init__(parent)
@@ -245,6 +246,7 @@ class Win32NativeEventFilter(QAbstractNativeEventFilter):
 
         return False, 0
 
+# === [SETTINGS_MANAGER] ===
 class SettingsManager(QObject):
     themeChanged = Signal()
     encodingChanged = Signal()
@@ -296,6 +298,7 @@ class SettingsManager(QObject):
             self.encodingChanged.emit()
 
 
+# === [TERMINAL_MANAGER] ===
 class TerminalSession(QObject):
     outputReceived = Signal(str)
     
@@ -398,6 +401,7 @@ class TerminalManager(QObject):
                     pass
 
 
+# === [CONFIG_HELPER] ===
 class ConfigHelper(QObject):
     modulesChanged = Signal()
 
@@ -413,6 +417,7 @@ class ConfigHelper(QObject):
             os.makedirs(self.modules_dir)
         self.migrate_all_modules()
 
+    # === [MIGRATION] ===
     def migrate_all_modules(self):
         """
         Auto-migrates folders of forms from the root module folder to forms/ subdirectory
@@ -535,6 +540,7 @@ class ConfigHelper(QObject):
     def cursorPos(self):
         return QCursor.pos()
 
+    # === [TREE_STRUCTURE] ===
     @Slot(result=str)
     def getTreeStructure(self):
         """
@@ -652,6 +658,7 @@ class ConfigHelper(QObject):
                         
         return json.dumps(nodes, ensure_ascii=False)
 
+    # === [MODULES_CRUD] ===
     @Slot(str, result=bool)
     def createModule(self, name):
         name = name.strip()
@@ -799,6 +806,7 @@ class ConfigHelper(QObject):
                 pass
         return "{}"
 
+    # === [FORMS_CRUD] ===
     @Slot(str, str, result=bool)
     def createForm(self, module_folder, form_name):
         form_name = form_name.strip()
@@ -939,6 +947,7 @@ class ConfigHelper(QObject):
             print(f"Error saving form properties: {e}")
             return form_folder
 
+    # === [FORM_FILES_CRUD] ===
     @Slot(str, str, result=str)
     def readFormFiles(self, module_folder, form_folder):
         """
@@ -1011,6 +1020,7 @@ class ConfigHelper(QObject):
                 return False
         return False
 
+    # === [VARIABLES_CRUD] ===
     @Slot(str, result=int)
     def createVariable(self, module_folder):
         """
@@ -1148,6 +1158,7 @@ class ConfigHelper(QObject):
                 return f.read()
         return ""
 
+# === [APP_ENTRY] ===
 if __name__ == "__main__":
     app = QGuiApplication(sys.argv)
     engine = QQmlApplicationEngine()

@@ -1,19 +1,19 @@
 /*
 ================================================================================
-AI INSTRUCTIONS & FILE LAYOUT (ATTENTION: ALWAYS UPDATE THIS BLOCK AFTER EDITS)
+AI INSTRUCTIONS & SECTION ANCHORS (ATTENTION: ALWAYS KEEP ANCHOR NAMES ON EDITS)
 ================================================================================
 Purpose: Main interface window for the PC control app (Lumen), written in QML.
 Features custom frameless window hint, dynamic border snapping, and modules lists.
 
-FILE LAYOUT & SECTION INDEX:
-- L6-L51: Geometry and percentage ratios configurations, window start-up initialization.
-- L52-L99: Physics parameters (tension, damping) and window mask clipping updates.
-- L100-L135: Physical transition animations timer engine (updates position/sizes).
-- L136-L169: Translucent overlay phantom boxes for snap edges indicator.
-- L170-L300: ListView/GridView representing modules (run/edit/delete context actions).
-- L301-L394: Custom Titlebar buttons area (reload interface, minimize/maximize/close).
-- L395-L548: Window resize, drag, and Snap/Unsnap handler MouseAreas.
-- L549-L583: Screen edge snapping zone calculations (checkSnap).
+SECTION ANCHORS INDEX:
+- // === [GEOMETRY] ===     Geometry and percentage ratios configurations, window start-up initialization.
+- // === [PHYSICS] ===      Physics parameters (tension, damping) and window mask clipping updates.
+- // === [ENGINE] ===       Physical transition animations timer engine (updates position/sizes).
+- // === [PHANTOMS] ===     Translucent overlay phantom boxes for snap edges indicator.
+- // === [MODULE_GRID] ===  ListView/GridView representing modules (run/edit/delete context actions).
+- // === [TITLEBAR] ===     Custom Titlebar buttons area (reload interface, minimize/maximize/close).
+- // === [RESIZE_DRAG] ===  Window resize, drag, and Snap/Unsnap handler MouseAreas.
+- // === [SNAPPING] ===     Screen edge snapping zone calculations (checkSnap).
 ================================================================================
 */
 
@@ -27,6 +27,7 @@ Window {
     visible: true; color: "transparent"
     flags: Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
 
+    // === [GEOMETRY] ===
     property var sgStart
     property int snappedEdge: 0 // 0 = none, 1 = left, 2 = right
     property bool isInside: false
@@ -68,6 +69,7 @@ Window {
         triggerMaskUpdate()
     }
 
+    // === [PHYSICS] ===
     // --- ФИЗИКА (ТВОЙ ХАРАКТЕР) ---
     property real tension: 0.14
     property real damping: 0.76
@@ -116,6 +118,7 @@ Window {
         )
     }
 
+    // === [ENGINE] ===
     // --- ФИЗИЧЕСКИЙ ДВИЖОК ---
     Timer {
         interval: 16; running: true; repeat: true
@@ -153,6 +156,7 @@ Window {
     }
 
 
+    // === [PHANTOMS] ===
     Rectangle {
         id: phantom
         visible: onEdge
@@ -165,6 +169,7 @@ Window {
     }
 
 
+    // === [MODULE_GRID] ===
     Item {
         id: windowWrapper
         x: curX; y: curY; width: curW; height: curH
@@ -318,6 +323,7 @@ Window {
             }
         }
 
+        // === [TITLEBAR] ===
         // --- ВЕРХНЯЯ ПАНЕЛЬ И КНОПКИ ---
         Item {
             id: uiLayer
@@ -412,6 +418,7 @@ Window {
     }
 
 
+    // === [RESIZE_DRAG] ===
     MouseArea {
         id: mouseArea
         anchors.fill: parent
@@ -567,6 +574,7 @@ Window {
 
 
 
+    // === [SNAPPING] ===
     function checkSnap(globalX, globalY) {
         var sg = SysHelper.screenGeometry(globalX, globalY)
         var local_x = sg.x - root.x

@@ -1,24 +1,24 @@
 /*
 ================================================================================
-AI INSTRUCTIONS & FILE LAYOUT (ATTENTION: ALWAYS UPDATE THIS BLOCK AFTER EDITS)
+AI INSTRUCTIONS & SECTION ANCHORS (ATTENTION: ALWAYS KEEP ANCHOR NAMES ON EDITS)
 ================================================================================
 Purpose: Main user interface for the Lumen Configurator, written in QML.
 
-FILE LAYOUT & SECTION INDEX:
-- L6-L50: Palette properties, visibility flags, theme/colors.
-- L51-L155: Flat list tree model flattening logic, expand/collapse and CRUD helpers.
-- L157-L245: Selected tree node property readers/savers.
-- L247-L347: Workspace floating window loaders for py and qml editors.
-- L349-L509: Vector Canvas Icons (ChevronIcon, FolderIcon, CubeIcon, FormIcon, VariableIcon).
-- L512-L739: Top application header (Titlebar, MenuBar, window maximize/minimize/close).
-- L741-L768: Configuration toolbar (Save modules button).
-- L770-L832: Dialog configurations (Create module dialog, create form dialog).
-- L834-L1340: Dialog confirmation boxes (deletions and warning modals).
-- L1342-L1532: SplitView Left Sidebar (Configuration hierarchy panel ListView & Explorer tree view).
-- L1535-L2400: SplitView Center Workspace (MDI floating windows area, text area codes editing tabs).
-- L2401-L2618: SplitView Right Sidebar (Properties Panel sheet with Modules, Forms, and Variables sheets).
-- L2620-L2656: StatusBar at the bottom (branch, encoding, space indices).
-- L2657-L2802: Native Terminal emulator container and session scripts.
+SECTION ANCHORS INDEX:
+- // === [PALETTE] ===        Palette properties, visibility flags, theme colors.
+- // === [TREE_MODEL] ===     Flat list tree model flattening logic, expand/collapse & CRUD helpers.
+- // === [NODE_HANDLERS] ===  Selected tree node properties readers and savers.
+- // === [WORKSPACE] ===      Workspace floating window loaders for QML and Py code editors.
+- // === [CANVAS_ICONS] ===   Vector Canvas Icons (ChevronIcon, FolderIcon, CubeIcon, etc.).
+- // === [APP_HEADER] ===     Top application header (custom Titlebar, MenuBar, window controls).
+- // === [TOOLBAR] ===        Configuration toolbar (Save modules button).
+- // === [DIALOGS] ===        Dialog configurations (Create module dialog, create form dialog).
+- // === [CONFIRMS] ===       Dialog confirmation boxes (deletions and warning modals).
+- // === [SIDEBAR_LEFT] ===   SplitView Left Sidebar (Hierarchy panel & Explorer tree view).
+- // === [EDITOR_AREA] ===    SplitView Center Workspace (MDI floating windows and text editor tabs).
+- // === [TERMINAL] ===       Native Terminal emulator container and session layouts.
+- // === [PROPERTIES] ===     SplitView Right Sidebar (Properties Panel sheets).
+- // === [STATUSBAR] ===      StatusBar at the bottom (branch, encoding, space indicators).
 ================================================================================
 */
 
@@ -43,6 +43,7 @@ ApplicationWindow {
         }
     }
 
+    // === [PALETTE] ===
     property bool isDark: SettingsManager && SettingsManager.theme === "dark"
     property string defEncoding: SettingsManager ? SettingsManager.defaultEncoding : "utf-8"
     
@@ -72,6 +73,7 @@ ApplicationWindow {
     property bool showTerminal: true
     property string openedModule: ""
     
+    // === [TREE_MODEL] ===
     ListModel { id: visibleTreeModel }
     property var expandedTreeNodes: ({"main": true})
     property var selectedTreeNode: null
@@ -178,6 +180,7 @@ ApplicationWindow {
         }
     }
 
+    // === [NODE_HANDLERS] ===
     function loadSelectedNodeProperties() {
         if (!selectedTreeNode) return;
         
@@ -273,6 +276,7 @@ ApplicationWindow {
         }
     }
 
+    // === [WORKSPACE] ===
     function openFormEditor(moduleFolder, formFolder) {
         var editorId = "form_" + moduleFolder + "_" + formFolder;
         for (var i = 0; i < openEditorsModel.count; ++i) {
@@ -377,6 +381,7 @@ ApplicationWindow {
 
     color: bgColor
 
+    // === [CANVAS_ICONS] ===
     component ChevronIcon: Item {
         width: 16
         height: 16
@@ -578,6 +583,7 @@ ApplicationWindow {
         }
     }
 
+    // === [APP_HEADER] ===
     header: Column {
         width: parent.width
         Rectangle {
@@ -767,6 +773,7 @@ ApplicationWindow {
         }
     }
         
+    // === [TOOLBAR] ===
     Rectangle {
         id: mainToolBar
             width: parent.width
@@ -796,6 +803,7 @@ ApplicationWindow {
         }
     }
 
+    // === [DIALOGS] ===
     Dialog {
         id: createModuleDialog
         title: "Создать модуль"
@@ -851,6 +859,7 @@ ApplicationWindow {
         }
     }
 
+    // === [CONFIRMS] ===
     Dialog {
         id: deleteModuleConfirmDialog
         property string folderName: ""
@@ -1355,6 +1364,7 @@ ApplicationWindow {
                 orientation: Qt.Horizontal
                 handle: VSSplitHandle {}
 
+                // === [SIDEBAR_LEFT] ===
                 // Left Sidebar (Hierarchy / Configuration)
                 SplitView {
                     id: leftSidebar
@@ -1562,6 +1572,7 @@ ApplicationWindow {
                     }
                 }
 
+                // === [EDITOR_AREA] ===
                 // Center Area (MDI Workspace + Terminal)
                 SplitView {
                     SplitView.fillWidth: true
@@ -2216,6 +2227,7 @@ ApplicationWindow {
                         }
                     }
 
+                    // === [TERMINAL] ===
                     // 4. POLISHED VS CODE TERMINAL
                     Rectangle {
                         id: terminalContainer
@@ -2427,6 +2439,7 @@ ApplicationWindow {
                     }
                 }
 
+                // === [PROPERTIES] ===
                 // Right Sidebar (Properties + Debugger)
                 SplitView {
                     id: rightSidebar
@@ -2647,6 +2660,7 @@ ApplicationWindow {
             }
         }
 
+        // === [STATUSBAR] ===
         // 5. BLUE STATUS BAR AT THE BOTTOM (VS Code style)
         Rectangle {
             id: statusBar
