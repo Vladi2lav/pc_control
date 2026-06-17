@@ -2,10 +2,10 @@
 
 
 a = Analysis(
-    ['main.py'],
+    ['configurator.py'],
     pathex=[],
     binaries=[],
-    datas=[('main.qml', '.'), ('paths.py', '.'), ('settings.json', '.')],
+    datas=[('configurator.qml', '.'), ('paths.py', '.')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -21,7 +21,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='PCControl',
+    name='Configurator',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -40,5 +40,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='PCControl',
+    name='Configurator',
 )

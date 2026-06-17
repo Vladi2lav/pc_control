@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """
 ================================================================================
-                    PCControl Project Packager & Developer Guide
+                    Lumen Project Packager & Developer Guide
 ================================================================================
 
-Этот скрипт предназначен для автоматической сборки проекта PCControl под Windows и Linux.
+Этот скрипт предназначен для автоматической сборки проекта Lumen под Windows и Linux.
 Он компилирует статическое ядро приложения в бинарные файлы с помощью PyInstaller,
 формирует структуру папок для портативной (Portable) и стандартной (Installed) версий,
 а также готовит структуру для создания AppImage под Linux.
@@ -17,7 +17,7 @@
 
 1. Статическое ядро (базовый функционал):
    - `main.py` / `main.qml`:
-     Главное приложение. В скомпилированном виде (PCControl.exe) также выполняет роль
+     Главное приложение. В скомпилированном виде (Lumen.exe) также выполняет роль
      интерпретатора Python для запуска пользовательских модулей через специальный
      закрытый аргумент `--run-script <путь_к_скрипту>`.
    - `configurator.py` / `configurator.qml`:
@@ -46,16 +46,16 @@
 3. Как работает переключение режимов работы (Portable vs Installed):
    - Портативный режим (Portable):
      Активируется созданием пустого файла `portable.txt` рядом с исполняемым файлом
-     PCControl.exe. В этом режиме программа хранит все настройки и модули локально
+     Lumen.exe. В этом режиме программа хранит все настройки и модули локально
      в подкаталоге `data/` (а именно: `data/settings/` и `data/modules/`).
    - Установленный режим (Installed):
      Если файла `portable.txt` нет, программа следует стандартам операционных систем:
      * Настройки (settings.json) сохраняются в:
-       - Windows: %APPDATA%/PCControl  (например, C:\\Users\\Имя\\AppData\\Roaming\\PCControl)
-       - Linux:   ~/.config/pccontrol
+       - Windows: %APPDATA%/Lumen  (например, C:\\Users\\Имя\\AppData\\Roaming\\Lumen)
+       - Linux:   ~/.config/lumen
      * Динамические модули (плагины) и базы данных сохраняются в:
-       - Windows: %LOCALAPPDATA%/PCControl/modules  (C:\\Users\\Имя\\AppData\\Local\\PCControl\\modules)
-       - Linux:   ~/.local/share/pccontrol/modules
+       - Windows: %LOCALAPPDATA%/Lumen/modules  (C:\\Users\\Имя\\AppData\\Local\\Lumen\\modules)
+       - Linux:   ~/.local/share/lumen/modules
 
 --------------------------------------------------------------------------------
                             ИНСТРУКЦИЯ ПО СБОРКЕ
@@ -64,10 +64,10 @@
     python build_project.py
 
 Скрипт создаст каталог `dist/`, внутри которого будут находиться:
-    - `PCControl_Portable_Windows/` (или `_Linux/`): Портативная версия с `portable.txt`.
-    - `PCControl_Installed_Windows/` (или `_Linux/`): Версия для инсталлятора.
-    - `PCControl.AppDir/` (только для Linux): Готовая структура для сборки AppImage.
-    - `PCControl_Portable.zip`: Архив с портативной версией для дистрибуции.
+    - `Lumen_Portable_Windows/` (или `_Linux/`): Портативная версия с `portable.txt`.
+    - `Lumen_Installed_Windows/` (или `_Linux/`): Версия для инсталлятора.
+    - `Lumen.AppDir/` (только для Linux): Готовая структура для сборки AppImage.
+    - `Lumen_Portable.zip`: Архив с портативной версией для дистрибуции.
 """
 
 import sys
@@ -120,7 +120,7 @@ log_info("Запуск компиляции статического ядра п
 # которые будут делить общие библиотеки (PySide6, Python DLLs и т.д.), что сильно экономит место.
 pyinstaller_args_main = [
     "main.py",
-    "--name=PCControl",
+    "--name=Lumen",
     "--noconfirm",
     "--onedir",
     "--windowed",
@@ -140,18 +140,18 @@ pyinstaller_args_config = [
 ]
 
 # Выполняем сборку главного приложения
-log_info("Компиляция главного модуля PCControl...")
+log_info("Компиляция главного модуля Lumen...")
 subprocess.run([sys.executable, "-m", "PyInstaller"] + pyinstaller_args_main, check=True)
 
 # Выполняем сборку конфигуратора
 log_info("Компиляция конфигуратора...")
 subprocess.run([sys.executable, "-m", "PyInstaller"] + pyinstaller_args_config, check=True)
 
-# Исходная папка со всеми бинарниками после сборки PCControl
-bin_dir = DIST_DIR / "PCControl"
+# Исходная папка со всеми бинарниками после сборки Lumen
+bin_dir = DIST_DIR / "Lumen"
 config_bin_dir = DIST_DIR / "Configurator"
 
-# Объединяем оба приложения в одну папку dist/PCControl (так как они делят общие библиотеки)
+# Объединяем оба приложения в одну папку dist/Lumen (так как они делят общие библиотеки)
 log_info("Интеграция конфигуратора в общий бинарный пакет...")
 for item in config_bin_dir.iterdir():
     dest_item = bin_dir / item.name
@@ -164,13 +164,13 @@ shutil.rmtree(config_bin_dir)
 
 # Создаем структуру Portable версии
 log_info("Создание Portable-версии...")
-portable_dist_name = "PCControl_Portable_Windows" if sys.platform == "win32" else "PCControl_Portable_Linux"
+portable_dist_name = "Lumen_Portable_Windows" if sys.platform == "win32" else "Lumen_Portable_Linux"
 portable_dir = DIST_DIR / portable_dist_name
 shutil.copytree(bin_dir, portable_dir)
 
 # Создаем файл portable.txt, активирующий портативный режим в paths.py
 with open(portable_dir / "portable.txt", "w", encoding="utf-8") as f:
-    f.write("Этот файл переводит PCControl в портативный режим.\nВсе настройки и модули будут сохраняться локально в папке 'data/'.\n")
+    f.write("Этот файл переводит Lumen в портативный режим.\nВсе настройки и модули будут сохраняться локально в папке 'data/'.\n")
 
 # Копируем стандартные пользовательские модули (из primer) в папку по умолчанию внутри Portable сборки
 default_mods_dir = portable_dir / "default_modules"
@@ -189,7 +189,7 @@ with zipfile.ZipFile(archive_name, 'w', zipfile.ZIP_DEFLATED) as zipf:
 
 # Создаем структуру Installed версии (для инсталлятора)
 log_info("Создание структуры Installed-версии (без portable.txt)...")
-installed_dist_name = "PCControl_Installed_Windows" if sys.platform == "win32" else "PCControl_Installed_Linux"
+installed_dist_name = "Lumen_Installed_Windows" if sys.platform == "win32" else "Lumen_Installed_Linux"
 installed_dir = DIST_DIR / installed_dist_name
 shutil.copytree(bin_dir, installed_dir)
 
@@ -201,13 +201,13 @@ if PRIMER_DIR.exists():
 # Генерируем сопроводительные инструкции для создания дистрибутивов
 if sys.platform == "win32":
     # Создание NSIS шаблона для сборщика инсталляторов на Windows
-    nsis_script_path = DIST_DIR / "pccontrol_installer.nsi"
-    log_info("Генерация шаблона инсталлятора NSIS (pccontrol_installer.nsi)...")
-    nsis_content = f"""; Шаблон скрипта для сборки инсталлятора PCControl с помощью NSIS (Nullsoft Scriptable Install System)
+    nsis_script_path = DIST_DIR / "lumen_installer.nsi"
+    log_info("Генерация шаблона инсталлятора NSIS (lumen_installer.nsi)...")
+    nsis_content = f"""; Шаблон скрипта для сборки инсталлятора Lumen с помощью NSIS (Nullsoft Scriptable Install System)
 Unicode true
-Name "PCControl"
-OutFile "PCControl_Setup.exe"
-InstallDir "$PROGRAMFILES64\\PCControl"
+Name "Lumen"
+OutFile "Lumen_Setup.exe"
+InstallDir "$PROGRAMFILES64\\Lumen"
 RequestExecutionLevel admin
 
 Page directory
@@ -220,21 +220,21 @@ Section "Install"
   File /r "{installed_dir}\\*.*"
   
   ; Создаем ярлыки в меню Пуск
-  CreateDirectory "$SMPROGRAMS\\PCControl"
-  CreateShortcut "$SMPROGRAMS\\PCControl\\PCControl.lnk" "$INSTDIR\\PCControl.exe"
-  CreateShortcut "$SMPROGRAMS\\PCControl\\Configurator.lnk" "$INSTDIR\\Configurator.exe"
-  CreateShortcut "$SMPROGRAMS\\PCControl\\Uninstall.lnk" "$INSTDIR\\uninstall.exe"
+  CreateDirectory "$SMPROGRAMS\\Lumen"
+  CreateShortcut "$SMPROGRAMS\\Lumen\\Lumen.lnk" "$INSTDIR\\Lumen.exe"
+  CreateShortcut "$SMPROGRAMS\\Lumen\\Configurator.lnk" "$INSTDIR\\Configurator.exe"
+  CreateShortcut "$SMPROGRAMS\\Lumen\\Uninstall.lnk" "$INSTDIR\\uninstall.exe"
   
   ; Создаем ярлык на рабочем столе
-  CreateShortcut "$DESKTOP\\PCControl.lnk" "$INSTDIR\\PCControl.exe"
+  CreateShortcut "$DESKTOP\\Lumen.lnk" "$INSTDIR\\Lumen.exe"
 
   ; Записываем деинсталлятор
   WriteUninstaller "$INSTDIR\\uninstall.exe"
 SectionEnd
 
 Section "Uninstall"
-  Delete "$DESKTOP\\PCControl.lnk"
-  RMDir /r "$SMPROGRAMS\\PCControl"
+  Delete "$DESKTOP\\Lumen.lnk"
+  RMDir /r "$SMPROGRAMS\\Lumen"
   RMDir /r "$INSTDIR"
 SectionEnd
 """
@@ -244,7 +244,7 @@ SectionEnd
 else:
     # Создание структуры AppImage для Linux
     log_info("Создание структуры AppDir для Linux AppImage...")
-    appdir = DIST_DIR / "PCControl.AppDir"
+    appdir = DIST_DIR / "Lumen.AppDir"
     appdir_usr_bin = appdir / "usr" / "bin"
     appdir_usr_bin.mkdir(parents=True, exist_ok=True)
     
@@ -258,21 +258,21 @@ SELF=$(readlink -f "$0")
 HERE=$(dirname "$SELF")
 export PATH="${HERE}/usr/bin:${PATH}"
 export LD_LIBRARY_PATH="${HERE}/usr/bin:${LD_LIBRARY_PATH}"
-exec "${HERE}/usr/bin/PCControl" "$@"
+exec "${HERE}/usr/bin/Lumen" "$@"
 """
     with open(apprun_path, "w", encoding="utf-8") as f:
         f.write(apprun_content)
     os.chmod(apprun_path, 0o755)
 
     # Создаем desktop-файл
-    desktop_path = appdir / "pccontrol.desktop"
+    desktop_path = appdir / "lumen.desktop"
     desktop_content = """[Desktop Entry]
-Name=PCControl
-Exec=PCControl
-Icon=pccontrol
+Name=Lumen
+Exec=Lumen
+Icon=lumen
 Type=Application
 Categories=Utility;
-Comment=PC Control Application
+Comment=Lumen Application
 Terminal=false
 """
     with open(desktop_path, "w", encoding="utf-8") as f:
@@ -282,7 +282,7 @@ Terminal=false
     # Копируем заглушку-иконку в AppDir
     icon_src = ROOT_DIR / "vivereedit.png"
     if icon_src.exists():
-        shutil.copy2(icon_src, appdir / "pccontrol.png")
+        shutil.copy2(icon_src, appdir / "lumen.png")
     
     # Выводим инструкции по компиляции AppImage
     log_warn("Для окончательной упаковки AppImage на Linux скачайте appimagetool:")

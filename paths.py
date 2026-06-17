@@ -24,29 +24,29 @@ if IS_PORTABLE:
 else:
     # Installed mode: save settings and modules in platform-specific standard directories
     if sys.platform == "win32":
-        # Windows configuration: %APPDATA%\PCControl
+        # Windows configuration: %APPDATA%\Lumen
         appdata = os.environ.get("APPDATA")
         if not appdata:
             appdata = Path.home() / "AppData" / "Roaming"
-        SETTINGS_DIR = Path(appdata) / "PCControl"
+        SETTINGS_DIR = Path(appdata) / "Lumen"
         
-        # Windows dynamic modules/data: %LOCALAPPDATA%\PCControl
+        # Windows dynamic modules/data: %LOCALAPPDATA%\Lumen
         local_appdata = os.environ.get("LOCALAPPDATA")
         if not local_appdata:
             local_appdata = Path.home() / "AppData" / "Local"
-        DATA_DIR = Path(local_appdata) / "PCControl"
+        DATA_DIR = Path(local_appdata) / "Lumen"
     else:
-        # Linux configuration: ~/.config/pccontrol
+        # Linux configuration: ~/.config/lumen
         config_home = os.environ.get("XDG_CONFIG_HOME")
         if not config_home:
             config_home = Path.home() / ".config"
-        SETTINGS_DIR = Path(config_home) / "pccontrol"
+        SETTINGS_DIR = Path(config_home) / "lumen"
         
-        # Linux dynamic modules/data: ~/.local/share/pccontrol
+        # Linux dynamic modules/data: ~/.local/share/lumen
         data_home = os.environ.get("XDG_DATA_HOME")
         if not data_home:
             data_home = Path.home() / ".local" / "share"
-        DATA_DIR = Path(data_home) / "pccontrol"
+        DATA_DIR = Path(data_home) / "lumen"
         
     MODULES_DIR = DATA_DIR / "modules"
 
