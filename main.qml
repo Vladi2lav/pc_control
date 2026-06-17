@@ -352,6 +352,7 @@ Window {
 
                 // Выпадающее меню (3 точки)
                 Rectangle {
+                    id: dotsButton
                     anchors.left: parent.left
                     anchors.verticalCenter: parent.verticalCenter
                     anchors.leftMargin: 15
@@ -372,6 +373,18 @@ Window {
                         hoverEnabled: true
                         onClicked: {
                             console.log("Открыто выпадающее меню")
+                            dotsMenu.popup()
+                        }
+                    }
+
+                    Menu {
+                        id: dotsMenu
+                        MenuItem {
+                            text: "Обновить интерфейс"
+                            onTriggered: {
+                                console.log("Обновление интерфейса...")
+                                SysHelper.reloadApp()
+                            }
                         }
                     }
                 }

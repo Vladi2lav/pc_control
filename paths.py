@@ -23,28 +23,16 @@ if sys.platform == "win32":
     if not appdata:
         appdata = Path.home() / "AppData" / "Roaming"
     SETTINGS_DIR = Path(appdata) / "Lumen"
-    
-    # Windows dynamic modules/data: %LOCALAPPDATA%\Lumen
-    local_appdata = os.environ.get("LOCALAPPDATA")
-    if not local_appdata:
-        local_appdata = Path.home() / "AppData" / "Local"
-    DATA_DIR = Path(local_appdata) / "Lumen"
 else:
     # Linux configuration: ~/.config/lumen
     config_home = os.environ.get("XDG_CONFIG_HOME")
     if not config_home:
         config_home = Path.home() / ".config"
     SETTINGS_DIR = Path(config_home) / "lumen"
-    
-    # Linux dynamic modules/data: ~/.local/share/lumen
-    data_home = os.environ.get("XDG_DATA_HOME")
-    if not data_home:
-        data_home = Path.home() / ".local" / "share"
-    DATA_DIR = Path(data_home) / "lumen"
 
 # Modules directory is always in the standard (permanent) path
 # to ensure they are preserved even if the portable version is deleted
-MODULES_DIR = DATA_DIR / "modules"
+MODULES_DIR = SETTINGS_DIR / "modules"
 
 # Override settings directory if portable mode is active
 if IS_PORTABLE:

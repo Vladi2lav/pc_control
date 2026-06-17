@@ -48,19 +48,464 @@ ApplicationWindow {
     property bool showTerminal: true
     property string openedModule: ""
     
-    ListModel { id: modulesModel }
-    function refreshModules() {
-        modulesModel.clear();
-        if (typeof SysHelper !== "undefined") {
-            var mods = SysHelper.getModules();
-            for (var i = 0; i < mods.length; i++) {
-                modulesModel.append({"name": mods[i]});
+    ListModel { id: visibleTreeModel }
+    property var expandedTreeNodes: ({"main": true})
+    property var selectedTreeNode: null
+
+    function refreshTree() {
+        if (typeof SysHelper === "undefined") return;
+        var rawJson = SysHelper.getTreeStructure();
+        var allNodes = JSON.parse(rawJson);
+        var visibleList = [];
+        
+        function isNodeVisible(node) {
+            var parentId = node.parentId;
+            while (parentId !== "") {
+                if (!expandedTreeNodes[parentId]) {
+                    return false;
+                }
+                var pNode = null;
+                for (var i = 0; i < allNodes.length; i++) {
+                    if (allNodes[i].id === parentId) {
+                        pNode = allNodes[i];
+                        break;
+                    }
+                }
+                if (!pNode) break;
+                parentId = pNode.parentId;
+            }
+            return true;
+        }
+        
+        for (var i = 0; i < allNodes.length; i++) {
+            var node = allNodes[i];
+            if (node.parentId === "" || isNodeVisible(node)) {
+                node.isExpanded = !!expandedTreeNodes[node.id];
+                visibleList.push(node);
+            }
+        }
+        
+        visibleTreeModel.clear();
+        for (var j = 0; j < visibleList.length; j++) {
+            visibleTreeModel.append(visibleList[j]);
+        }
+    }
+
+    Connections {
+        target: typeof SysHelper !== "undefined" ? SysHelper : null
+        function onModulesChanged() { refreshTree(); }
+    }
+
+    function toggleNodeExpanded(id) {
+        if (expandedTreeNodes[id]) {
+            delete expandedTreeNodes[id];
+        } else {
+            expandedTreeNodes[id] = true;
+        }
+        expandedTreeNodes = Object.assign({}, expandedTreeNodes);
+        refreshTree();
+    }
+
+    function createVariableForModule(modFolder) {
+        var newIndex = SysHelper.createVariable(modFolder);
+        if (newIndex >= 0) {
+            var varsNodeId = "variables_" + modFolder;
+            expandedTreeNodes[varsNodeId] = true;
+            expandedTreeNodes = Object.assign({}, expandedTreeNodes);
+            refreshTree();
+            
+            selectedTreeNode = {
+                "id": "var_" + modFolder + "_" + newIndex,
+                "parentId": varsNodeId,
+                "name": "newVar",
+                "folderName": "",
+                "type": "variable",
+                "depth": 3,
+                "hasChildren": false,
+                "icon": "variable",
+                "variableIndex": newIndex
+            };
+            loadSelectedNodeProperties();
+        }
+    }
+
+    function showTreeContextMenu(model, x, y) {
+        if (model.type === "root") {
+            contextMenuRoot.popup();
+        } else if (model.type === "module") {
+            contextMenuModule.folderName = model.folderName;
+            contextMenuModule.popup();
+        } else if (model.type === "category_forms") {
+            contextMenuCategoryForms.folderName = model.parentId.substring(7);
+            contextMenuCategoryForms.popup();
+        } else if (model.type === "category_variables") {
+            contextMenuCategoryVariables.folderName = model.parentId.substring(7);
+            contextMenuCategoryVariables.popup();
+        } else if (model.type === "form") {
+            var modFolder = model.parentId.substring(6);
+            contextMenuForm.moduleFolder = modFolder;
+            contextMenuForm.formFolder = model.folderName;
+            contextMenuForm.popup();
+        } else if (model.type === "variable") {
+            var modFolder = model.parentId.substring(10);
+            contextMenuVariable.moduleFolder = modFolder;
+            contextMenuVariable.varIndex = model.variableIndex;
+            contextMenuVariable.popup();
+        }
+    }
+
+    function loadSelectedNodeProperties() {
+        if (!selectedTreeNode) return;
+        
+        if (selectedTreeNode.type === "module") {
+            var raw = SysHelper.readModuleProperties(selectedTreeNode.folderName);
+            var props = JSON.parse(raw);
+            propModuleNameField.text = props.name || selectedTreeNode.folderName;
+            propModuleVersionField.text = props.version || "1.0.0";
+            propModuleAuthorField.text = props.author || "";
+            propModuleDescField.text = props.description || "";
+        } else if (selectedTreeNode.type === "form") {
+            var modFolder = selectedTreeNode.parentId.substring(6);
+            var raw = SysHelper.readFormProperties(modFolder, selectedTreeNode.folderName);
+            var props = JSON.parse(raw);
+            propFormNameField.text = props.name || selectedTreeNode.folderName;
+            propFormTitleField.text = props.title || selectedTreeNode.folderName;
+            propFormWidthField.text = props.width !== undefined ? props.width.toString() : "800";
+            propFormHeightField.text = props.height !== undefined ? props.height.toString() : "600";
+        } else if (selectedTreeNode.type === "variable") {
+            var modFolder = selectedTreeNode.parentId.substring(10);
+            var raw = SysHelper.readVariableProperties(modFolder, selectedTreeNode.variableIndex);
+            var props = JSON.parse(raw);
+            propVarNameField.text = props.name || "";
+            var tIdx = propVarTypeCombo.indexOfValue(props.type || "String");
+            propVarTypeCombo.currentIndex = tIdx !== -1 ? tIdx : 0;
+            propVarValueField.text = props.value !== undefined ? props.value.toString() : "";
+            propVarDescField.text = props.description || "";
+        }
+    }
+
+    function saveSelectedNodeProperties() {
+        if (!selectedTreeNode) return;
+        
+        if (selectedTreeNode.type === "module") {
+            var modProps = {
+                "name": propModuleNameField.text,
+                "version": propModuleVersionField.text,
+                "author": propModuleAuthorField.text,
+                "description": propModuleDescField.text
+            };
+            var res = SysHelper.saveModuleProperties(selectedTreeNode.folderName, JSON.stringify(modProps));
+            if (res !== selectedTreeNode.folderName) {
+                var oldId = selectedTreeNode.id;
+                var newId = "module_" + res;
+                if (expandedTreeNodes[oldId]) {
+                    expandedTreeNodes[newId] = true;
+                    delete expandedTreeNodes[oldId];
+                }
+                for (var i = 0; i < openEditorsModel.count; i++) {
+                    if (openEditorsModel.get(i).moduleName === selectedTreeNode.folderName) {
+                        openEditorsModel.setProperty(i, "moduleName", res);
+                    }
+                }
+                selectedTreeNode.folderName = res;
+                selectedTreeNode.id = newId;
+            }
+            selectedTreeNode.name = propModuleNameField.text;
+            refreshTree();
+        } else if (selectedTreeNode.type === "form") {
+            var formProps = {
+                "name": propFormNameField.text,
+                "title": propFormTitleField.text,
+                "width": parseInt(propFormWidthField.text) || 800,
+                "height": parseInt(propFormHeightField.text) || 600
+            };
+            var modFolder = selectedTreeNode.parentId.substring(6);
+            var res = SysHelper.saveFormProperties(modFolder, selectedTreeNode.folderName, JSON.stringify(formProps));
+            if (res !== selectedTreeNode.folderName) {
+                var oldId = "form_" + modFolder + "_" + selectedTreeNode.folderName;
+                var newId = "form_" + modFolder + "_" + res;
+                for (var i = 0; i < openEditorsModel.count; i++) {
+                    if (openEditorsModel.get(i).editorId === oldId) {
+                        openEditorsModel.setProperty(i, "editorId", newId);
+                        openEditorsModel.setProperty(i, "formName", res);
+                    }
+                }
+                selectedTreeNode.folderName = res;
+                selectedTreeNode.id = newId;
+            }
+            selectedTreeNode.name = propFormNameField.text;
+            refreshTree();
+        } else if (selectedTreeNode.type === "variable") {
+            var varProps = {
+                "name": propVarNameField.text,
+                "type": propVarTypeCombo.currentText,
+                "value": propVarValueField.text,
+                "description": propVarDescField.text
+            };
+            var modFolder = selectedTreeNode.parentId.substring(10);
+            SysHelper.saveVariableProperties(modFolder, selectedTreeNode.variableIndex, JSON.stringify(varProps));
+            selectedTreeNode.name = propVarNameField.text;
+            refreshTree();
+        }
+    }
+
+    function openFormEditor(moduleFolder, formFolder) {
+        var editorId = "form_" + moduleFolder + "_" + formFolder;
+        for (var i = 0; i < openEditorsModel.count; ++i) {
+            var item = openEditorsModel.get(i);
+            if (item.editorId === editorId) {
+                var win = openEditorsRepeater.itemAt(i);
+                if (win) {
+                    openEditorsModel.setProperty(i, "isMinimized", false);
+                    var newX = Math.max(0, Math.round((workspace.width - win.width) / 2));
+                    var newY = Math.max(workspaceTabBar.visible ? 35 : 0, Math.round((workspace.height - win.height) / 2));
+                    openEditorsModel.setProperty(i, "editorX", newX);
+                    openEditorsModel.setProperty(i, "editorY", newY);
+                    bringToFront(win, i);
+                    win.forceActiveFocus();
+                }
+                return;
+            }
+        }
+        
+        var raw = SysHelper.readFormFiles(moduleFolder, formFolder);
+        var codes = JSON.parse(raw);
+        var defaultWidth = 800;
+        var defaultHeight = 550;
+        var startX = Math.max(0, Math.round((workspace.width - defaultWidth) / 2));
+        var startY = Math.max(workspaceTabBar.visible ? 35 : 0, Math.round((workspace.height - defaultHeight) / 2));
+        
+        openEditorsModel.append({
+            "editorId": editorId,
+            "editorType": "form",
+            "moduleName": moduleFolder,
+            "formName": formFolder,
+            "pyCode": codes.pyCode,
+            "qmlCode": codes.qmlCode,
+            "currentTab": 0,
+            "editorX": startX,
+            "editorY": startY,
+            "editorWidth": defaultWidth,
+            "editorHeight": defaultHeight,
+            "isMaximized": false,
+            "isMinimized": false,
+            "zIndex": ++maxZIndex
+        });
+        activeModuleName = moduleFolder;
+    }
+
+    function openModuleEditor(name) {
+        var editorId = "module_" + name;
+        for (var i = 0; i < openEditorsModel.count; ++i) {
+            var item = openEditorsModel.get(i);
+            if (item.editorId === editorId) {
+                var win = openEditorsRepeater.itemAt(i);
+                if (win) {
+                    openEditorsModel.setProperty(i, "isMinimized", false);
+                    var newX = Math.max(0, Math.round((workspace.width - win.width) / 2));
+                    var newY = Math.max(workspaceTabBar.visible ? 35 : 0, Math.round((workspace.height - win.height) / 2));
+                    openEditorsModel.setProperty(i, "editorX", newX);
+                    openEditorsModel.setProperty(i, "editorY", newY);
+                    bringToFront(win, i);
+                    win.forceActiveFocus();
+                }
+                return;
+            }
+        }
+        
+        var code = SysHelper.readModuleMain(name);
+        var defaultWidth = 750;
+        var defaultHeight = 480;
+        var startX = Math.max(0, Math.round((workspace.width - defaultWidth) / 2));
+        var startY = Math.max(workspaceTabBar.visible ? 35 : 0, Math.round((workspace.height - defaultHeight) / 2));
+        
+        openEditorsModel.append({
+            "editorId": editorId,
+            "editorType": "module",
+            "moduleName": name,
+            "codeText": code,
+            "editorX": startX,
+            "editorY": startY,
+            "editorWidth": defaultWidth,
+            "editorHeight": defaultHeight,
+            "isMaximized": false,
+            "isMinimized": false,
+            "zIndex": ++maxZIndex
+        });
+        activeModuleName = name;
+    }
+
+    function saveEditor(idx) {
+        var item = openEditorsModel.get(idx);
+        if (!item) return;
+        if (item.editorType === "form") {
+            SysHelper.saveFormFiles(item.moduleName, item.formName, item.pyCode, item.qmlCode);
+        } else {
+            SysHelper.saveModuleMain(item.moduleName, item.codeText);
+        }
+    }
+
+    function saveAllOpenedModules() {
+        for (var i = 0; i < openEditorsModel.count; ++i) {
+            saveEditor(i);
+        }
+    }
+
+    color: bgColor
+
+    component ChevronIcon: Item {
+        width: 16
+        height: 16
+        property bool expanded: false
+        Canvas {
+            anchors.fill: parent
+            rotation: expanded ? 90 : 0
+            Behavior on rotation { NumberAnimation { duration: 150 } }
+            onPaint: {
+                var ctx = getContext("2d");
+                ctx.reset();
+                ctx.strokeStyle = textColor;
+                ctx.lineWidth = 1.5;
+                ctx.lineCap = "round";
+                ctx.lineJoin = "round";
+                ctx.beginPath();
+                ctx.moveTo(6, 4);
+                ctx.lineTo(10, 8);
+                ctx.lineTo(6, 12);
+                ctx.stroke();
             }
         }
     }
-    Connections { target: typeof SysHelper !== "undefined" ? SysHelper : null; function onModulesChanged() { refreshModules(); } }
 
-    color: bgColor
+    component FolderIcon: Item {
+        width: 16
+        height: 16
+        property bool open: false
+        Canvas {
+            anchors.fill: parent
+            onPaint: {
+                var ctx = getContext("2d");
+                ctx.reset();
+                ctx.fillStyle = isDark ? "#c59b27" : "#a17e1b";
+                ctx.beginPath();
+                ctx.rect(2, 4, 12, 9);
+                ctx.fill();
+                ctx.fillStyle = isDark ? "#e5b83b" : "#c69b27";
+                ctx.beginPath();
+                ctx.moveTo(2, 6);
+                ctx.lineTo(6, 6);
+                ctx.lineTo(8, 4);
+                ctx.lineTo(13, 4);
+                ctx.lineTo(13, 6);
+                ctx.lineTo(2, 6);
+                ctx.fill();
+            }
+        }
+    }
+
+    component CubeIcon: Item {
+        width: 18
+        height: 18
+        Canvas {
+            anchors.fill: parent
+            onPaint: {
+                var ctx = getContext("2d");
+                ctx.reset();
+                var cx = 9, cy = 9;
+                ctx.fillStyle = "#2d7dd2";
+                ctx.beginPath();
+                ctx.moveTo(cx, cy - 8);
+                ctx.lineTo(cx + 7, cy - 4);
+                ctx.lineTo(cx, cy);
+                ctx.lineTo(cx - 7, cy - 4);
+                ctx.closePath();
+                ctx.fill();
+                ctx.fillStyle = "#1b4d8a";
+                ctx.beginPath();
+                ctx.moveTo(cx - 7, cy - 4);
+                ctx.lineTo(cx, cy);
+                ctx.lineTo(cx, cy + 8);
+                ctx.lineTo(cx - 7, cy + 4);
+                ctx.closePath();
+                ctx.fill();
+                ctx.fillStyle = "#113057";
+                ctx.beginPath();
+                ctx.moveTo(cx, cy);
+                ctx.lineTo(cx + 7, cy - 4);
+                ctx.lineTo(cx + 7, cy + 4);
+                ctx.lineTo(cx, cy + 8);
+                ctx.closePath();
+                ctx.fill();
+                ctx.fillStyle = "#55b1f9";
+                ctx.beginPath();
+                ctx.moveTo(cx, cy - 3);
+                ctx.lineTo(cx + 4, cy - 1);
+                ctx.lineTo(cx, cy + 1);
+                ctx.lineTo(cx - 4, cy - 1);
+                ctx.closePath();
+                ctx.fill();
+                ctx.fillStyle = "#439be3";
+                ctx.beginPath();
+                ctx.moveTo(cx - 4, cy - 1);
+                ctx.lineTo(cx, cy + 1);
+                ctx.lineTo(cx, cy + 5);
+                ctx.lineTo(cx - 4, cy + 3);
+                ctx.closePath();
+                ctx.fill();
+                ctx.fillStyle = "#3382c2";
+                ctx.beginPath();
+                ctx.moveTo(cx, cy + 1);
+                ctx.lineTo(cx + 4, cy - 1);
+                ctx.lineTo(cx + 4, cy + 3);
+                ctx.lineTo(cx, cy + 5);
+                ctx.closePath();
+                ctx.fill();
+            }
+        }
+    }
+
+    component FormIcon: Item {
+        width: 16
+        height: 16
+        Canvas {
+            anchors.fill: parent
+            onPaint: {
+                var ctx = getContext("2d");
+                ctx.reset();
+                ctx.strokeStyle = isDark ? "#4ec9b0" : "#267f99";
+                ctx.lineWidth = 1.2;
+                ctx.strokeRect(2, 3, 12, 10);
+                ctx.fillStyle = isDark ? "#4ec9b0" : "#267f99";
+                ctx.fillRect(2, 3, 12, 2.5);
+                ctx.fillStyle = "#ff5f56"; ctx.fillRect(3.5, 4, 1, 1);
+                ctx.strokeStyle = textMutedColor;
+                ctx.beginPath();
+                ctx.moveTo(4, 8); ctx.lineTo(12, 8);
+                ctx.moveTo(4, 10); ctx.lineTo(8, 10);
+                ctx.stroke();
+            }
+        }
+    }
+
+    component VariableIcon: Item {
+        width: 16
+        height: 16
+        Canvas {
+            anchors.fill: parent
+            onPaint: {
+                var ctx = getContext("2d");
+                ctx.reset();
+                ctx.strokeStyle = isDark ? "#b5cea8" : "#098658";
+                ctx.lineWidth = 1.2;
+                ctx.beginPath();
+                ctx.moveTo(5, 4); ctx.lineTo(3, 4); ctx.lineTo(3, 12); ctx.lineTo(5, 12);
+                ctx.moveTo(11, 4); ctx.lineTo(13, 4); ctx.lineTo(13, 12); ctx.lineTo(11, 12);
+                ctx.moveTo(6, 6); ctx.lineTo(10, 10);
+                ctx.moveTo(10, 6); ctx.lineTo(6, 10);
+                ctx.stroke();
+            }
+        }
+    }
 
     component VSSplitHandle: Rectangle {
         implicitWidth: 4
@@ -349,6 +794,121 @@ ApplicationWindow {
                 if (typeof SysHelper !== "undefined") SysHelper.createModule(moduleNameInput.text.trim());
                 moduleNameInput.text = "";
             }
+        }
+    }
+
+    Dialog {
+        id: createFormDialog
+        property string moduleFolder: ""
+        title: "Создать форму"
+        x: Math.round((mainWindow.width - width) / 2)
+        y: Math.round((mainWindow.height - height) / 2)
+        width: 300
+        modal: true
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        
+        ColumnLayout {
+            anchors.fill: parent
+            TextField {
+                id: formNameInput
+                Layout.fillWidth: true
+                placeholderText: "Имя формы (напр. FormMain)"
+            }
+        }
+        onAccepted: {
+            if (formNameInput.text.trim() !== "") {
+                SysHelper.createForm(moduleFolder, formNameInput.text.trim());
+                var formsNodeId = "forms_" + moduleFolder;
+                expandedTreeNodes[formsNodeId] = true;
+                expandedTreeNodes = Object.assign({}, expandedTreeNodes);
+                refreshTree();
+                formNameInput.text = "";
+            }
+        }
+    }
+
+    Dialog {
+        id: deleteModuleConfirmDialog
+        property string folderName: ""
+        title: "Удалить модуль"
+        x: Math.round((mainWindow.width - width) / 2)
+        y: Math.round((mainWindow.height - height) / 2)
+        width: 350
+        modal: true
+        standardButtons: Dialog.Yes | Dialog.No
+        Text {
+            text: "Вы действительно хотите удалить модуль \"" + deleteModuleConfirmDialog.folderName + "\" и все его файлы?"
+            color: textColor
+            wrapMode: Text.Wrap
+            width: parent.width
+        }
+        onAccepted: {
+            for (var i = openEditorsModel.count - 1; i >= 0; i--) {
+                if (openEditorsModel.get(i).moduleName === folderName) {
+                    openEditorsModel.remove(i);
+                }
+            }
+            if (selectedTreeNode && selectedTreeNode.folderName === folderName) {
+                selectedTreeNode = null;
+            }
+            SysHelper.deleteModule(folderName);
+            refreshTree();
+        }
+    }
+
+    Dialog {
+        id: deleteFormConfirmDialog
+        property string moduleFolder: ""
+        property string formFolder: ""
+        title: "Удалить форму"
+        x: Math.round((mainWindow.width - width) / 2)
+        y: Math.round((mainWindow.height - height) / 2)
+        width: 350
+        modal: true
+        standardButtons: Dialog.Yes | Dialog.No
+        Text {
+            text: "Вы действительно хотите удалить форму \"" + deleteFormConfirmDialog.formFolder + "\"?"
+            color: textColor
+            wrapMode: Text.Wrap
+            width: parent.width
+        }
+        onAccepted: {
+            var editorId = "form_" + moduleFolder + "_" + formFolder;
+            for (var i = openEditorsModel.count - 1; i >= 0; i--) {
+                if (openEditorsModel.get(i).editorId === editorId) {
+                    openEditorsModel.remove(i);
+                }
+            }
+            if (selectedTreeNode && selectedTreeNode.folderName === formFolder && selectedTreeNode.type === "form") {
+                selectedTreeNode = null;
+            }
+            SysHelper.deleteForm(moduleFolder, formFolder);
+            refreshTree();
+        }
+    }
+
+    Dialog {
+        id: deleteVariableConfirmDialog
+        property string moduleFolder: ""
+        property int varIndex: -1
+        title: "Удалить переменную"
+        x: Math.round((mainWindow.width - width) / 2)
+        y: Math.round((mainWindow.height - height) / 2)
+        width: 320
+        modal: true
+        standardButtons: Dialog.Yes | Dialog.No
+        Text {
+            text: "Вы действительно хотите удалить эту переменную?"
+            color: textColor
+            wrapMode: Text.Wrap
+            width: parent.width
+        }
+        onAccepted: {
+            if (selectedTreeNode && selectedTreeNode.type === "variable" && selectedTreeNode.variableIndex === varIndex) {
+                selectedTreeNode = null;
+            }
+            SysHelper.deleteVariable(moduleFolder, varIndex);
+            refreshTree();
         }
     }
 
@@ -808,64 +1368,127 @@ ApplicationWindow {
                                 MouseArea {
                                     anchors.fill: parent
                                     acceptedButtons: Qt.RightButton
-                                    onClicked: hierarchyMenu.popup()
+                                    onClicked: contextMenuRoot.popup()
                                 }
+                                
                                 Menu {
-                                    id: hierarchyMenu
+                                    id: contextMenuRoot
                                     MenuItem { text: qsTr("Создать модуль"); onTriggered: createModuleDialog.open() }
-                                    MenuItem { text: qsTr("Скрыть панель"); onTriggered: showHierarchy = false }
-                                    MenuItem { text: qsTr("Настройки"); onTriggered: settingsWindow.show() }
                                 }
+
                                 Menu {
-                                    id: moduleContextMenu
-                                    property string moduleName: ""
-                                    MenuItem { 
-                                        text: qsTr("Открыть модуль")
-                                        onTriggered: {
-                                            openModuleEditor(moduleContextMenu.moduleName);
-                                        }
-                                    }
-                                    MenuItem {
-                                        text: qsTr("Сменить иконку")
-                                        onTriggered: {
-                                            console.log("Сменить иконку для " + moduleContextMenu.moduleName);
-                                        }
-                                    }
+                                    id: contextMenuModule
+                                    property string folderName: ""
+                                    MenuItem { text: qsTr("Создать форму"); onTriggered: { createFormDialog.moduleFolder = contextMenuModule.folderName; createFormDialog.open() } }
+                                    MenuItem { text: qsTr("Создать переменную"); onTriggered: { createVariableForModule(contextMenuModule.folderName) } }
+                                    MenuItem { text: qsTr("Открыть main.py"); onTriggered: openModuleEditor(contextMenuModule.folderName) }
                                     Menu {
                                         title: qsTr("Экспорт")
-                                        MenuItem {
-                                            text: qsTr("Как исходники (zip)")
-                                            onTriggered: triggerExport("zip", moduleContextMenu.moduleName)
-                                        }
-                                        MenuItem {
-                                            text: qsTr("В вид без редактирования (Windows)")
-                                            onTriggered: triggerExport("windows", moduleContextMenu.moduleName)
-                                        }
-                                        MenuItem {
-                                            text: qsTr("В вид без редактирования (Linux)")
-                                            onTriggered: triggerExport("linux", moduleContextMenu.moduleName)
-                                        }
+                                        MenuItem { text: qsTr("Как исходники (zip)"); onTriggered: triggerExport("zip", contextMenuModule.folderName) }
+                                        MenuItem { text: qsTr("В вид без редактирования (Windows)"); onTriggered: triggerExport("windows", contextMenuModule.folderName) }
+                                        MenuItem { text: qsTr("В вид без редактирования (Linux)"); onTriggered: triggerExport("linux", contextMenuModule.folderName) }
                                     }
+                                    MenuItem { text: qsTr("Удалить модуль"); onTriggered: { deleteModuleConfirmDialog.folderName = contextMenuModule.folderName; deleteModuleConfirmDialog.open() } }
+                                }
+
+                                Menu {
+                                    id: contextMenuCategoryForms
+                                    property string folderName: ""
+                                    MenuItem { text: qsTr("Создать форму"); onTriggered: { createFormDialog.moduleFolder = contextMenuCategoryForms.folderName; createFormDialog.open() } }
+                                }
+
+                                Menu {
+                                    id: contextMenuForm
+                                    property string moduleFolder: ""
+                                    property string formFolder: ""
+                                    MenuItem { text: qsTr("Открыть форму"); onTriggered: openFormEditor(contextMenuForm.moduleFolder, contextMenuForm.formFolder) }
+                                    MenuItem { text: qsTr("Удалить форму"); onTriggered: { deleteFormConfirmDialog.moduleFolder = contextMenuForm.moduleFolder; deleteFormConfirmDialog.formFolder = contextMenuForm.formFolder; deleteFormConfirmDialog.open() } }
+                                }
+
+                                Menu {
+                                    id: contextMenuCategoryVariables
+                                    property string folderName: ""
+                                    MenuItem { text: qsTr("Создать переменную"); onTriggered: { createVariableForModule(contextMenuCategoryVariables.folderName) } }
+                                }
+
+                                Menu {
+                                    id: contextMenuVariable
+                                    property string moduleFolder: ""
+                                    property int varIndex: -1
+                                    MenuItem { text: qsTr("Удалить переменную"); onTriggered: { deleteVariableConfirmDialog.moduleFolder = contextMenuVariable.moduleFolder; deleteVariableConfirmDialog.varIndex = contextMenuVariable.varIndex; deleteVariableConfirmDialog.open() } }
                                 }
                             }
                             
                             Item { 
                                 Layout.fillHeight: true; Layout.fillWidth: true 
                                 ListView {
+                                    id: treeListView
                                     anchors.fill: parent
-                                    model: modulesModel
+                                    model: visibleTreeModel
+                                    clip: true
                                     delegate: Rectangle {
-                                        width: ListView.view.width
-                                        height: 28
-                                        color: itemMouseArea.containsMouse ? listHoverBg : "transparent"
+                                        width: treeListView.width
+                                        height: 26
+                                        color: {
+                                            if (selectedTreeNode && selectedTreeNode.id === model.id) {
+                                                return isDark ? "#37373d" : "#e4e6f1"
+                                            }
+                                            return itemMouseArea.containsMouse ? listHoverBg : "transparent"
+                                        }
                                         
-                                        Text {
-                                            text: "📦  " + model.name
-                                            color: textColor
-                                            font.pixelSize: 12
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            anchors.left: parent.left
-                                            anchors.leftMargin: 15
+                                        RowLayout {
+                                            anchors.fill: parent
+                                            anchors.leftMargin: 8 + model.depth * 14
+                                            spacing: 5
+                                            
+                                            Item {
+                                                width: 14; height: 14
+                                                visible: model.hasChildren
+                                                ChevronIcon {
+                                                    anchors.fill: parent
+                                                    expanded: model.isExpanded
+                                                }
+                                            }
+                                            
+                                            Item {
+                                                width: 14; height: 14
+                                                visible: !model.hasChildren
+                                            }
+                                            
+                                            Item {
+                                                width: 16; height: 16
+                                                Layout.alignment: Qt.AlignVCenter
+                                                
+                                                FolderIcon {
+                                                    anchors.fill: parent
+                                                    visible: model.icon === "folder"
+                                                    open: model.isExpanded
+                                                }
+                                                
+                                                CubeIcon {
+                                                    anchors.fill: parent
+                                                    visible: model.icon === "module"
+                                                }
+                                                
+                                                FormIcon {
+                                                    anchors.fill: parent
+                                                    visible: model.icon === "form"
+                                                }
+                                                
+                                                VariableIcon {
+                                                    anchors.fill: parent
+                                                    visible: model.icon === "variable"
+                                                }
+                                            }
+                                            
+                                            Text {
+                                                Layout.fillWidth: true
+                                                text: model.name
+                                                color: (selectedTreeNode && selectedTreeNode.id === model.id) ? (isDark ? "#ffffff" : "#000000") : textColor
+                                                font.pixelSize: 12
+                                                font.bold: model.type === "root" || model.type === "module"
+                                                elide: Text.ElideRight
+                                            }
                                         }
                                         
                                         MouseArea {
@@ -874,12 +1497,37 @@ ApplicationWindow {
                                             hoverEnabled: true
                                             acceptedButtons: Qt.LeftButton | Qt.RightButton
                                             onDoubleClicked: {
-                                                openModuleEditor(model.name);
+                                                if (model.hasChildren) {
+                                                    toggleNodeExpanded(model.id);
+                                                } else if (model.type === "module") {
+                                                    openModuleEditor(model.folderName);
+                                                } else if (model.type === "form") {
+                                                    var modFolder = model.parentId.substring(6); // parentId: "forms_<modFolder>"
+                                                    openFormEditor(modFolder, model.folderName);
+                                                }
                                             }
                                             onClicked: (mouse) => {
+                                                selectedTreeNode = {
+                                                    "id": model.id,
+                                                    "parentId": model.parentId,
+                                                    "name": model.name,
+                                                    "folderName": model.folderName,
+                                                    "type": model.type,
+                                                    "depth": model.depth,
+                                                    "hasChildren": model.hasChildren,
+                                                    "icon": model.icon,
+                                                    "variableIndex": model.type === "variable" ? model.variableIndex : -1
+                                                };
+                                                loadSelectedNodeProperties();
+                                                
                                                 if (mouse.button === Qt.RightButton) {
-                                                    moduleContextMenu.moduleName = model.name;
-                                                    moduleContextMenu.popup();
+                                                    showTreeContextMenu(model, mouse.x, mouse.y);
+                                                } else {
+                                                    // Check if clicked in the chevron or indentation area on the left
+                                                    var chevronEndX = 8 + model.depth * 14 + 18;
+                                                    if (model.hasChildren && mouse.x >= 0 && mouse.x <= chevronEndX) {
+                                                        toggleNodeExpanded(model.id);
+                                                    }
                                                 }
                                             }
                                         }
@@ -940,7 +1588,7 @@ ApplicationWindow {
                                         
                                         Text {
                                             Layout.fillWidth: true
-                                            text: "📦  " + model.moduleName
+                                            text: model.editorType === "form" ? "🖼️  " + model.formName : "🐍  " + model.moduleName
                                             color: (activeModuleName === model.moduleName) ? textColor : textMutedColor
                                             font.pixelSize: 11
                                             elide: Text.ElideRight
@@ -1046,7 +1694,7 @@ ApplicationWindow {
                                     color: win.activeFocus ? headerColor : (isDark ? "#282828" : "#f0f0f0")
 
                                     Text {
-                                        text: "🐍  " + model.moduleName + "  -  main.py"
+                                        text: model.editorType === "form" ? "🖼️  " + model.moduleName + "  -  " + model.formName : "🐍  " + model.moduleName + "  -  main.py"
                                         color: win.activeFocus ? textColor : textMutedColor
                                         font.bold: true
                                         font.pixelSize: 11
@@ -1071,7 +1719,7 @@ ApplicationWindow {
                                                 onEntered: parent.color = isDark ? "#444" : "#ddd"
                                                 onExited: parent.color = "transparent"
                                                 onClicked: {
-                                                    SysHelper.saveModuleMain(model.moduleName, codeTextArea.text)
+                                                    saveEditor(index)
                                                 }
                                             }
                                         }
@@ -1116,7 +1764,7 @@ ApplicationWindow {
                                                 onEntered: parent.color = "#e81123"
                                                 onExited: parent.color = "transparent"
                                                 onClicked: {
-                                                    SysHelper.saveModuleMain(model.moduleName, codeTextArea.text)
+                                                    saveEditor(index)
                                                     openEditorsModel.remove(index)
                                                 }
                                             }
@@ -1179,50 +1827,141 @@ ApplicationWindow {
                                     }
                                 }
 
-                                ScrollView {
+                                ColumnLayout {
                                     anchors.top: winTitleBar.bottom
                                     anchors.left: parent.left
                                     anchors.right: parent.right
                                     anchors.bottom: parent.bottom
-                                    clip: true
+                                    spacing: 0
 
-                                    TextArea {
-                                        id: codeTextArea
-                                        text: model.codeText
-                                        color: textColor
-                                        font.family: "Consolas, Courier New, monospace"
-                                        font.pixelSize: 13
-                                        background: Rectangle { color: windowBgColor }
-                                        selectByMouse: true
-                                        padding: 10
+                                    // Tab buttons for Form editor
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        height: 28
+                                        color: panelColor
+                                        visible: model.editorType === "form"
                                         
-                                        Component.onCompleted: {
-                                            if (typeof SysHelper !== "undefined") {
-                                                SysHelper.highlightDocument(codeTextArea.textDocument, isDark)
-                                            }
-                                        }
+                                        Rectangle { width: parent.width; height: 1; color: borderColor; anchors.bottom: parent.bottom }
                                         
-                                        onTextChanged: {
-                                            model.codeText = text
+                                        RowLayout {
+                                            anchors.fill: parent
+                                            spacing: 1
+                                            
+                                            Rectangle {
+                                                width: 80; height: 28
+                                                color: (model.currentTab === 0) ? windowBgColor : "transparent"
+                                                Text { text: "QML"; color: (model.currentTab === 0) ? textColor : textMutedColor; font.pixelSize: 11; font.bold: true; anchors.centerIn: parent }
+                                                MouseArea { anchors.fill: parent; onClicked: model.currentTab = 0 }
+                                            }
+                                            
+                                            Rectangle {
+                                                width: 80; height: 28
+                                                color: (model.currentTab === 1) ? windowBgColor : "transparent"
+                                                Text { text: "Python"; color: (model.currentTab === 1) ? textColor : textMutedColor; font.pixelSize: 11; font.bold: true; anchors.centerIn: parent }
+                                                MouseArea { anchors.fill: parent; onClicked: model.currentTab = 1 }
+                                            }
                                         }
+                                    }
 
-                                        onActiveFocusChanged: {
-                                            if (activeFocus) {
-                                                mainWindow.activeModuleName = model.moduleName
-                                                mainWindow.cursorInfoText = getLineCol(text, cursorPosition)
+                                    StackLayout {
+                                        Layout.fillWidth: true
+                                        Layout.fillHeight: true
+                                        currentIndex: (model.editorType === "form" && model.currentTab !== undefined) ? model.currentTab : 0
+                                        
+                                        // Tab 0 / Single Editor: QML or main.py
+                                        ScrollView {
+                                            clip: true
+                                            TextArea {
+                                                id: editorArea1
+                                                text: model.editorType === "form" ? (model.qmlCode || "") : (model.codeText || "")
+                                                color: textColor
+                                                font.family: "Consolas, Courier New, monospace"
+                                                font.pixelSize: 13
+                                                background: Rectangle { color: windowBgColor }
+                                                selectByMouse: true
+                                                padding: 10
+                                                
+                                                Component.onCompleted: {
+                                                    if (typeof SysHelper !== "undefined") {
+                                                        var lang = model.editorType === "form" ? "qml" : "python"
+                                                        SysHelper.highlightDocument(editorArea1.textDocument, isDark, lang)
+                                                    }
+                                                }
+                                                
+                                                onTextChanged: {
+                                                    if (model.editorType === "form") {
+                                                        model.qmlCode = text
+                                                    } else {
+                                                        model.codeText = text
+                                                    }
+                                                }
+
+                                                onActiveFocusChanged: {
+                                                    if (activeFocus) {
+                                                        mainWindow.activeModuleName = model.moduleName
+                                                        mainWindow.cursorInfoText = getLineCol(text, cursorPosition)
+                                                    }
+                                                }
+
+                                                onCursorPositionChanged: {
+                                                    if (activeFocus) {
+                                                        mainWindow.cursorInfoText = getLineCol(text, cursorPosition)
+                                                    }
+                                                }
+
+                                                Shortcut {
+                                                    sequence: "Ctrl+S"
+                                                    onActivated: {
+                                                        saveEditor(index)
+                                                    }
+                                                }
                                             }
                                         }
 
-                                        onCursorPositionChanged: {
-                                            if (activeFocus) {
-                                                mainWindow.cursorInfoText = getLineCol(text, cursorPosition)
-                                            }
-                                        }
+                                        // Tab 1: Python editor for Form
+                                        ScrollView {
+                                            clip: true
+                                            TextArea {
+                                                id: editorArea2
+                                                text: model.pyCode || ""
+                                                color: textColor
+                                                font.family: "Consolas, Courier New, monospace"
+                                                font.pixelSize: 13
+                                                background: Rectangle { color: windowBgColor }
+                                                selectByMouse: true
+                                                padding: 10
+                                                
+                                                Component.onCompleted: {
+                                                    if (typeof SysHelper !== "undefined") {
+                                                        SysHelper.highlightDocument(editorArea2.textDocument, isDark, "python")
+                                                    }
+                                                }
+                                                
+                                                onTextChanged: {
+                                                    if (model.editorType === "form") {
+                                                        model.pyCode = text
+                                                    }
+                                                }
 
-                                        Shortcut {
-                                            sequence: "Ctrl+S"
-                                            onActivated: {
-                                                SysHelper.saveModuleMain(model.moduleName, codeTextArea.text)
+                                                onActiveFocusChanged: {
+                                                    if (activeFocus) {
+                                                        mainWindow.activeModuleName = model.moduleName
+                                                        mainWindow.cursorInfoText = getLineCol(text, cursorPosition)
+                                                    }
+                                                }
+
+                                                onCursorPositionChanged: {
+                                                    if (activeFocus) {
+                                                        mainWindow.cursorInfoText = getLineCol(text, cursorPosition)
+                                                    }
+                                                }
+
+                                                Shortcut {
+                                                    sequence: "Ctrl+S"
+                                                    onActivated: {
+                                                        saveEditor(index)
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -1683,13 +2422,181 @@ ApplicationWindow {
                         ColumnLayout {
                             anchors.fill: parent
                             spacing: 0
+                            
                             Rectangle {
                                 Layout.fillWidth: true
                                 height: 35
                                 color: headerColor
                                 Text { text: "СВОЙСТВА"; color: textColor; font.bold: true; font.pixelSize: 11; anchors.verticalCenter: parent.verticalCenter; anchors.left: parent.left; anchors.leftMargin: 20 }
                             }
-                            Item { Layout.fillHeight: true; Layout.fillWidth: true }
+                            
+                            ScrollView {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                clip: true
+                                
+                                ColumnLayout {
+                                    id: propScrollCol
+                                    width: parent.width - 20
+                                    Layout.margins: 10
+                                    spacing: 12
+                                    visible: selectedTreeNode !== null
+                                    
+                                    // --- Module Properties ---
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        visible: selectedTreeNode && selectedTreeNode.type === "module"
+                                        spacing: 6
+                                        
+                                        Text { text: "Имя папки:"; color: textMutedColor; font.pixelSize: 11 }
+                                        TextField {
+                                            id: propModuleNameField
+                                            Layout.fillWidth: true
+                                            color: textColor
+                                            background: Rectangle { color: bgColor; border.color: borderColor; radius: 3 }
+                                            onEditingFinished: saveSelectedNodeProperties()
+                                        }
+                                        
+                                        Text { text: "Версия:"; color: textMutedColor; font.pixelSize: 11 }
+                                        TextField {
+                                            id: propModuleVersionField
+                                            Layout.fillWidth: true
+                                            color: textColor
+                                            background: Rectangle { color: bgColor; border.color: borderColor; radius: 3 }
+                                            onEditingFinished: saveSelectedNodeProperties()
+                                        }
+                                        
+                                        Text { text: "Автор:"; color: textMutedColor; font.pixelSize: 11 }
+                                        TextField {
+                                            id: propModuleAuthorField
+                                            Layout.fillWidth: true
+                                            color: textColor
+                                            background: Rectangle { color: bgColor; border.color: borderColor; radius: 3 }
+                                            onEditingFinished: saveSelectedNodeProperties()
+                                        }
+                                        
+                                        Text { text: "Описание:"; color: textMutedColor; font.pixelSize: 11 }
+                                        TextArea {
+                                            id: propModuleDescField
+                                            Layout.fillWidth: true
+                                            implicitHeight: 80
+                                            color: textColor
+                                            background: Rectangle { color: bgColor; border.color: borderColor; radius: 3 }
+                                            onEditingFinished: saveSelectedNodeProperties()
+                                        }
+                                    }
+                                    
+                                    // --- Form Properties ---
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        visible: selectedTreeNode && selectedTreeNode.type === "form"
+                                        spacing: 6
+                                        
+                                        Text { text: "Имя формы:"; color: textMutedColor; font.pixelSize: 11 }
+                                        TextField {
+                                            id: propFormNameField
+                                            Layout.fillWidth: true
+                                            color: textColor
+                                            background: Rectangle { color: bgColor; border.color: borderColor; radius: 3 }
+                                            onEditingFinished: saveSelectedNodeProperties()
+                                        }
+                                        
+                                        Text { text: "Заголовок:"; color: textMutedColor; font.pixelSize: 11 }
+                                        TextField {
+                                            id: propFormTitleField
+                                            Layout.fillWidth: true
+                                            color: textColor
+                                            background: Rectangle { color: bgColor; border.color: borderColor; radius: 3 }
+                                            onEditingFinished: saveSelectedNodeProperties()
+                                        }
+                                        
+                                        RowLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 10
+                                            
+                                            ColumnLayout {
+                                                Layout.fillWidth: true
+                                                Text { text: "Ширина:"; color: textMutedColor; font.pixelSize: 11 }
+                                                TextField {
+                                                    id: propFormWidthField
+                                                    Layout.fillWidth: true
+                                                    color: textColor
+                                                    background: Rectangle { color: bgColor; border.color: borderColor; radius: 3 }
+                                                    validator: IntValidator { bottom: 100; top: 5000 }
+                                                    onEditingFinished: saveSelectedNodeProperties()
+                                                }
+                                            }
+                                            
+                                            ColumnLayout {
+                                                Layout.fillWidth: true
+                                                Text { text: "Высота:"; color: textMutedColor; font.pixelSize: 11 }
+                                                TextField {
+                                                    id: propFormHeightField
+                                                    Layout.fillWidth: true
+                                                    color: textColor
+                                                    background: Rectangle { color: bgColor; border.color: borderColor; radius: 3 }
+                                                    validator: IntValidator { bottom: 100; top: 5000 }
+                                                    onEditingFinished: saveSelectedNodeProperties()
+                                                }
+                                            }
+                                        }
+                                    }
+                                    
+                                    // --- Variable Properties ---
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        visible: selectedTreeNode && selectedTreeNode.type === "variable"
+                                        spacing: 6
+                                        
+                                        Text { text: "Имя:"; color: textMutedColor; font.pixelSize: 11 }
+                                        TextField {
+                                            id: propVarNameField
+                                            Layout.fillWidth: true
+                                            color: textColor
+                                            background: Rectangle { color: bgColor; border.color: borderColor; radius: 3 }
+                                            onEditingFinished: saveSelectedNodeProperties()
+                                        }
+                                        
+                                        Text { text: "Тип:"; color: textMutedColor; font.pixelSize: 11 }
+                                        ComboBox {
+                                            id: propVarTypeCombo
+                                            Layout.fillWidth: true
+                                            model: ["String", "Integer", "Float", "Boolean", "List", "Dict"]
+                                            onActivated: saveSelectedNodeProperties()
+                                        }
+                                        
+                                        Text { text: "Значение:"; color: textMutedColor; font.pixelSize: 11 }
+                                        TextField {
+                                            id: propVarValueField
+                                            Layout.fillWidth: true
+                                            color: textColor
+                                            background: Rectangle { color: bgColor; border.color: borderColor; radius: 3 }
+                                            onEditingFinished: saveSelectedNodeProperties()
+                                        }
+                                        
+                                        Text { text: "Описание:"; color: textMutedColor; font.pixelSize: 11 }
+                                        TextField {
+                                            id: propVarDescField
+                                            Layout.fillWidth: true
+                                            color: textColor
+                                            background: Rectangle { color: bgColor; border.color: borderColor; radius: 3 }
+                                            onEditingFinished: saveSelectedNodeProperties()
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            Text {
+                                Layout.alignment: Qt.AlignHCenter
+                                visible: selectedTreeNode === null
+                                text: "Выберите элемент для просмотра свойств"
+                                color: textMutedColor
+                                font.pixelSize: 11
+                                horizontalAlignment: Text.AlignHCenter
+                                wrapMode: Text.Wrap
+                                Layout.fillWidth: true
+                                Layout.margins: 15
+                            }
                         }
                     }
 
@@ -1839,64 +2746,11 @@ ApplicationWindow {
         return "Ln " + line + ", Col " + col;
     }
 
-    function openModuleEditor(name) {
-        // Check if already open
-        for (var i = 0; i < openEditorsModel.count; ++i) {
-            if (openEditorsModel.get(i).moduleName === name) {
-                var win = openEditorsRepeater.itemAt(i)
-                if (win) {
-                    openEditorsModel.setProperty(i, "isMinimized", false)
-                    
-                    // Move to center of workspace
-                    var newX = Math.max(0, Math.round((workspace.width - win.width) / 2))
-                    var newY = Math.max(workspaceTabBar.visible ? 35 : 0, Math.round((workspace.height - win.height) / 2))
-                    openEditorsModel.setProperty(i, "editorX", newX)
-                    openEditorsModel.setProperty(i, "editorY", newY)
-                    
-                    bringToFront(win, i)
-                    win.forceActiveFocus()
-                }
-                return
-            }
-        }
-        
-        // Read content
-        var code = ""
-        if (typeof SysHelper !== "undefined") {
-            code = SysHelper.readModuleMain(name)
-        }
-        
-        // Calculate centered position
-        var defaultWidth = 700
-        var defaultHeight = 450
-        var startX = Math.max(0, Math.round((workspace.width - defaultWidth) / 2))
-        var startY = Math.max(workspaceTabBar.visible ? 35 : 0, Math.round((workspace.height - defaultHeight) / 2))
-        
-        openEditorsModel.append({
-            "moduleName": name,
-            "codeText": code,
-            "editorX": startX,
-            "editorY": startY,
-            "editorWidth": defaultWidth,
-            "editorHeight": defaultHeight,
-            "isMaximized": false,
-            "isMinimized": false,
-            "zIndex": ++maxZIndex
-        })
-        activeModuleName = name
-    }
 
     function bringToFront(win, idx) {
         maxZIndex += 1
         openEditorsModel.setProperty(idx, "zIndex", maxZIndex)
         activeModuleName = openEditorsModel.get(idx).moduleName
-    }
-
-    function saveAllOpenedModules() {
-        for (var i = 0; i < openEditorsModel.count; ++i) {
-            var item = openEditorsModel.get(i)
-            SysHelper.saveModuleMain(item.moduleName, item.codeText)
-        }
     }
 
     function triggerExport(type, moduleName) {
@@ -1907,7 +2761,7 @@ ApplicationWindow {
     }
 
     Component.onCompleted: {
-        refreshModules();
+        refreshTree();
         
         if (typeof initialModuleName !== "undefined" && initialModuleName !== "") {
             openModuleEditor(initialModuleName);

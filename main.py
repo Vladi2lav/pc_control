@@ -37,12 +37,12 @@ os.environ["QT_QUICK_CONTROLS_STYLE"] = "Basic"
 
 from PySide6.QtGui import QGuiApplication, QCursor, QRegion, QWindow
 from PySide6.QtQml import QQmlApplicationEngine
-from PySide6.QtCore import QObject, Slot, QPoint, QRect
+from PySide6.QtCore import QObject, Slot, QPoint, QRect, QTimer
 
 class SysHelper(QObject):
-    def __init__(self, parent=None):
-        
+    def __init__(self, engine=None, parent=None):
         super().__init__(parent)
+        self._engine = engine
         self._app = QGuiApplication.instance()
 
     @Slot(result=QRect)
@@ -140,10 +140,60 @@ class SysHelper(QObject):
                 return False
         return False
 
+    @Slot()
+    def reloadApp(self):
+        if not self._engine:
+            return
+            
+        # Capture current window state if possible
+        state = {}
+        root_objects = self._engine.rootObjects()
+        if root_objects:
+            root_window = root_objects[0]
+            try:
+                state['curX'] = root_window.property('curX')
+                state['curY'] = root_window.property('curY')
+                state['curW'] = root_window.property('curW')
+                state['curH'] = root_window.property('curH')
+                state['tarX'] = root_window.property('tarX')
+                state['tarY'] = root_window.property('tarY')
+                state['tarW'] = root_window.property('tarW')
+                state['tarH'] = root_window.property('tarH')
+                state['appState'] = root_window.property('appState')
+                state['snappedEdge'] = root_window.property('snappedEdge')
+            except Exception as e:
+                print(f"Error saving state: {e}")
+            
+            root_window.close()
+            root_window.deleteLater()
+            
+        self._engine.clearComponentCache()
+        
+        def load_new():
+            qml_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "main.qml")
+            self._engine.load(qml_file)
+            
+            new_roots = self._engine.rootObjects()
+            if new_roots and state:
+                new_window = new_roots[0]
+                try:
+                    # Apply saved state
+                    for k, v in state.items():
+                        if v is not None:
+                            new_window.setProperty(k, v)
+                    
+                    from PySide6.QtCore import QMetaObject
+                    QMetaObject.invokeMethod(new_window, "triggerMaskUpdate")
+                except Exception as e:
+                    print(f"Error restoring state: {e}")
+                    
+        QTimer.singleShot(50, load_new)
+
 if __name__ == "__main__":
     app = QGuiApplication(sys.argv)
+    app.setQuitOnLastWindowClosed(False)
     engine = QQmlApplicationEngine()
-    helper = SysHelper()
+    helper = SysHelper(engine)
     engine.rootContext().setContextProperty("SysHelper", helper)
     
     qml_file = os.path.join(os.path.dirname(__file__), "main.qml")
