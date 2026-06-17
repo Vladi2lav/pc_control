@@ -1,3 +1,22 @@
+/*
+================================================================================
+AI INSTRUCTIONS & FILE LAYOUT (ATTENTION: ALWAYS UPDATE THIS BLOCK AFTER EDITS)
+================================================================================
+Purpose: Main interface window for the PC control app (Lumen), written in QML.
+Features custom frameless window hint, dynamic border snapping, and modules lists.
+
+FILE LAYOUT & SECTION INDEX:
+- L6-L51: Geometry and percentage ratios configurations, window start-up initialization.
+- L52-L99: Physics parameters (tension, damping) and window mask clipping updates.
+- L100-L135: Physical transition animations timer engine (updates position/sizes).
+- L136-L169: Translucent overlay phantom boxes for snap edges indicator.
+- L170-L300: ListView/GridView representing modules (run/edit/delete context actions).
+- L301-L394: Custom Titlebar buttons area (reload interface, minimize/maximize/close).
+- L395-L548: Window resize, drag, and Snap/Unsnap handler MouseAreas.
+- L549-L583: Screen edge snapping zone calculations (checkSnap).
+================================================================================
+*/
+
 import QtQuick
 import QtQuick.Window
 import QtQuick.Controls

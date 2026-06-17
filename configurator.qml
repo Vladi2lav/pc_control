@@ -1,3 +1,27 @@
+/*
+================================================================================
+AI INSTRUCTIONS & FILE LAYOUT (ATTENTION: ALWAYS UPDATE THIS BLOCK AFTER EDITS)
+================================================================================
+Purpose: Main user interface for the Lumen Configurator, written in QML.
+
+FILE LAYOUT & SECTION INDEX:
+- L6-L50: Palette properties, visibility flags, theme/colors.
+- L51-L155: Flat list tree model flattening logic, expand/collapse and CRUD helpers.
+- L157-L245: Selected tree node property readers/savers.
+- L247-L347: Workspace floating window loaders for py and qml editors.
+- L349-L509: Vector Canvas Icons (ChevronIcon, FolderIcon, CubeIcon, FormIcon, VariableIcon).
+- L512-L739: Top application header (Titlebar, MenuBar, window maximize/minimize/close).
+- L741-L768: Configuration toolbar (Save modules button).
+- L770-L832: Dialog configurations (Create module dialog, create form dialog).
+- L834-L1340: Dialog confirmation boxes (deletions and warning modals).
+- L1342-L1532: SplitView Left Sidebar (Configuration hierarchy panel ListView & Explorer tree view).
+- L1535-L2400: SplitView Center Workspace (MDI floating windows area, text area codes editing tabs).
+- L2401-L2618: SplitView Right Sidebar (Properties Panel sheet with Modules, Forms, and Variables sheets).
+- L2620-L2656: StatusBar at the bottom (branch, encoding, space indices).
+- L2657-L2802: Native Terminal emulator container and session scripts.
+================================================================================
+*/
+
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts

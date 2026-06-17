@@ -1,3 +1,27 @@
+"""
+================================================================================
+AI INSTRUCTIONS & FILE LAYOUT (ATTENTION: ALWAYS UPDATE THIS BLOCK AFTER EDITS)
+================================================================================
+Purpose: This file acts as the backend for the Lumen Configurator UI (QML-based).
+Standard User Folder: Unified under %APPDATA%\Lumen\modules (Roaming AppData).
+
+FILE LAYOUT & SECTION INDEX:
+- L20-L55: Win32 console encoding setups and initial imports.
+- L56-L175: QSyntaxHighlighter (GenericHighlighter) supporting Python and QML syntax formats.
+- L176-L223: Native event filters (Win32NativeEventFilter) for custom borderless titlebar resizing/moving.
+- L224-L274: Theme and default encoding configuration manager (SettingsManager).
+- L275-L376: Native terminal processes runner and manager (TerminalSession, TerminalManager).
+- L377-L1164: Core configurator business logic helper (ConfigHelper). Key slots:
+  - L392: migrate_all_modules() - Scans and relocates legacy form folders under forms/. Creates defaults.
+  - L514: getTreeStructure() - Scans AppData and returns a flat JSON node list for the QML Explorer tree.
+  - L630: createModule() / saveModuleProperties() / readModuleProperties() / deleteModule() - Modules CRUD.
+  - L778: createForm() / saveFormProperties() / readFormProperties() / deleteForm() - Forms CRUD.
+  - L918: readFormFiles() / saveFormFiles() - Reads/writes form QML and Py code files.
+  - L990: createVariable() / saveVariableProperties() / readVariableProperties() / deleteVariable() - Variables CRUD.
+- L1127-L1164: Application entry point and Win32 event filter attachment.
+================================================================================
+"""
+
 import sys
 import os
 
