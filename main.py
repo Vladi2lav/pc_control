@@ -1,6 +1,34 @@
 import sys
 import os
 import signal
+import paths
+
+# Intercept command line for running dynamic modules within the compiled app context
+if len(sys.argv) > 2 and sys.argv[1] == "--run-script":
+    script_path = sys.argv[2]
+    if os.path.exists(script_path):
+        sys.path.insert(0, os.path.dirname(script_path))
+        with open(script_path, "r", encoding="utf-8") as f:
+            code = f.read()
+        global_dict = {
+            "__file__": script_path,
+            "__name__": "__main__",
+        }
+        exec(code, global_dict)
+    sys.exit(0)
+
+# Configure Windows console to use system Active Code Page to prevent garbled text/mojibake
+if sys.platform == "win32":
+    try:
+        import ctypes
+        acp = ctypes.windll.kernel32.GetACP()
+        ctypes.windll.kernel32.SetConsoleOutputCP(acp)
+        ctypes.windll.kernel32.SetConsoleCP(acp)
+    except Exception:
+        pass
+
+# Initialize folders and copy defaults if needed
+paths.initialize_user_directories()
 
 # DISABLE HIGH DPI SCALING to perfectly align multiple monitors 1:1
 os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "0"
@@ -55,10 +83,10 @@ class SysHelper(QObject):
 
     @Slot(result=list)
     def getModules(self):
-        primer_dir = r"c:\Новая папка\control_no_ai\primer"
         try:
-            if os.path.exists(primer_dir):
-                return [d for d in os.listdir(primer_dir) if os.path.isdir(os.path.join(primer_dir, d))]
+            modules_dir = str(paths.MODULES_DIR)
+            if os.path.exists(modules_dir):
+                return [d for d in os.listdir(modules_dir) if os.path.isdir(os.path.join(modules_dir, d))]
         except Exception:
             pass
         return []
@@ -66,32 +94,43 @@ class SysHelper(QObject):
     @Slot(str)
     def runModule(self, name):
         import subprocess
-        main_path = os.path.join(r"c:\Новая папка\control_no_ai\primer", name, "main.py")
+        main_path = os.path.join(str(paths.MODULES_DIR), name, "main.py")
         if os.path.exists(main_path):
-            python_exe = sys.executable
-            subprocess.Popen([python_exe, main_path], cwd=os.path.dirname(main_path))
+            if paths.IS_FROZEN:
+                subprocess.Popen([sys.executable, "--run-script", main_path], cwd=os.path.dirname(main_path))
+            else:
+                subprocess.Popen([sys.executable, main_path], cwd=os.path.dirname(main_path))
             
     @Slot()
     def runConfigurator(self):
         import subprocess
-        config_path = os.path.join(r"c:\Новая папка\control_no_ai", "configurator.py")
-        if os.path.exists(config_path):
-            python_exe = sys.executable
-            subprocess.Popen([python_exe, config_path], cwd=r"c:\Новая папка\control_no_ai")
+        if paths.IS_FROZEN:
+            exe_name = "Configurator.exe" if sys.platform == "win32" else "Configurator"
+            config_path = os.path.join(str(paths.APP_DIR), exe_name)
+            if os.path.exists(config_path):
+                subprocess.Popen([config_path], cwd=str(paths.APP_DIR))
+        else:
+            config_path = os.path.join(str(paths.APP_DIR), "configurator.py")
+            if os.path.exists(config_path):
+                subprocess.Popen([sys.executable, config_path], cwd=str(paths.APP_DIR))
 
     @Slot(str)
     def editModule(self, name):
         import subprocess
-        config_path = os.path.join(r"c:\Новая папка\control_no_ai", "configurator.py")
-        if os.path.exists(config_path):
-            python_exe = sys.executable
-            subprocess.Popen([python_exe, config_path, name], cwd=r"c:\Новая папка\control_no_ai")
+        if paths.IS_FROZEN:
+            exe_name = "Configurator.exe" if sys.platform == "win32" else "Configurator"
+            config_path = os.path.join(str(paths.APP_DIR), exe_name)
+            if os.path.exists(config_path):
+                subprocess.Popen([config_path, name], cwd=str(paths.APP_DIR))
+        else:
+            config_path = os.path.join(str(paths.APP_DIR), "configurator.py")
+            if os.path.exists(config_path):
+                subprocess.Popen([sys.executable, config_path, name], cwd=str(paths.APP_DIR))
 
     @Slot(str, result=bool)
     def deleteModule(self, name):
         import shutil
-        primer_dir = r"c:\Новая папка\control_no_ai\primer"
-        mod_dir = os.path.join(primer_dir, name)
+        mod_dir = os.path.join(str(paths.MODULES_DIR), name)
         if os.path.exists(mod_dir) and os.path.isdir(mod_dir):
             try:
                 shutil.rmtree(mod_dir)

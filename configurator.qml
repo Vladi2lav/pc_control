@@ -607,7 +607,8 @@ ApplicationWindow {
         repeat: false
         onTriggered: {
             var success = false
-            var dest = "c:/Новая папка/control_no_ai/primer/" + exportLoadingDialog.moduleName
+            var modules_dir = (typeof SysHelper !== "undefined") ? SysHelper.modulesDir : ""
+            var dest = modules_dir + "/" + exportLoadingDialog.moduleName
             if (typeof SysHelper !== "undefined") {
                 if (exportLoadingDialog.exportType === "zip") {
                     success = SysHelper.exportModuleSource(exportLoadingDialog.moduleName, dest + "_export")

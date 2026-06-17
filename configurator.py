@@ -1,5 +1,21 @@
 import sys
 import os
+
+# Configure Windows console to use system Active Code Page to prevent garbled text/mojibake
+if sys.platform == "win32":
+    try:
+        import ctypes
+        acp = ctypes.windll.kernel32.GetACP()
+        ctypes.windll.kernel32.SetConsoleOutputCP(acp)
+        ctypes.windll.kernel32.SetConsoleCP(acp)
+    except Exception:
+        pass
+
+import paths
+
+# Initialize folders and copy defaults if needed
+paths.initialize_user_directories()
+
 os.environ["QT_QUICK_CONTROLS_STYLE"] = "Basic"
 import signal
 import json
@@ -164,7 +180,7 @@ class SettingsManager(QObject):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.settings_file = os.path.join(os.path.dirname(__file__), "settings.json")
+        self.settings_file = str(paths.SETTINGS_FILE)
         self._theme = "dark"
         self._default_encoding = "utf-8"
         self.load_settings()
@@ -314,10 +330,14 @@ class TerminalManager(QObject):
 class ConfigHelper(QObject):
     modulesChanged = Signal()
 
+    @Property(str, constant=True)
+    def modulesDir(self):
+        return str(paths.MODULES_DIR)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self._app = QGuiApplication.instance()
-        self.primer_dir = r"c:\Новая папка\control_no_ai\primer"
+        self.primer_dir = str(paths.MODULES_DIR)
         if not os.path.exists(self.primer_dir):
             os.makedirs(self.primer_dir)
 

@@ -267,11 +267,13 @@ Window {
                         anchors.centerIn: parent
                         modal: true
                         standardButtons: Dialog.Ok | Dialog.Cancel
+                        width: 320
                         
                         property string moduleToDelete: ""
                         property int moduleIndexToDelete: -1
 
-                        contentItem: Text {
+                        Text {
+                            anchors.fill: parent
                             text: "Вы действительно хотите удалить модуль '" + confirmDeleteDialog.moduleToDelete + "'?"
                             color: appState === 1 ? "white" : "#212121"
                             font.pixelSize: 13
